@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - Pro 修正版</title>
+    <title>地鐵留言 App - 邊界對位版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -20,7 +20,7 @@
             position: absolute; bottom: 80px; right: 25px; width: 130px;
             z-index: 999; opacity: 0; transition: opacity 0.8s ease; 
             pointer-events: none;
-            mix-blend-mode: screen; /* 預覽時也套用濾色去背 */
+            mix-blend-mode: screen;
         }
 
         .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
@@ -62,12 +62,12 @@
 
 <script>
 const App = {
-    // 重新校正綠板的四個角落，並將範圍稍微向外推
+    // 左右兩邊內移：將 X 軸從原先的 (-0.10, 1.10) 修正回更集中的區域
     pts: [
-        {x: -0.10, y: 0.36}, // 左上 (向左上方推移)
-        {x: 1.10, y: 0.24},  // 右上 (向右上方推移)
-        {x: 1.08, y: 0.76},  // 右下 (向右下方推移)
-        {x: -0.08, y: 0.58}  // 左下 (向左下方推移)
+        {x: 0.05, y: 0.38}, // 左上 (內移)
+        {x: 0.95, y: 0.26}, // 右上 (內移)
+        {x: 0.92, y: 0.74}, // 右下 (內移)
+        {x: 0.02, y: 0.55}  // 左下 (內移)
     ],
     timing: { start: 2.55, end: 3.83 }, 
     
@@ -104,7 +104,7 @@ const App = {
         cvs.width = 1800; cvs.height = 800;
         ctx.clearRect(0,0,1800,800);
         let lines = text.includes('/') ? text.split('/') : [text];
-        let fontSize = lines.length > 1 ? 180 : 280;
+        let fontSize = lines.length > 1 ? 160 : 260; // 稍微調整字體以配合區域
         ctx.fillStyle = '#e60000';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = `900 ${fontSize}px sans-serif`;
@@ -118,7 +118,6 @@ const App = {
     animate: function() {
         const cur = this.v.currentTime;
         const dur = this.v.duration || 5.5;
-        // Logo 在影片結束前 2 秒淡入 [cite: 2025-12-28]
         this.logoImg.style.opacity = (cur >= dur - 2) ? '1' : '0';
         
         const clipDur = this.timing.end - this.timing.start;
@@ -133,7 +132,6 @@ const App = {
         requestAnimationFrame(() => this.animate());
     },
 
-    // 像素級去背邏輯
     getProcessedLogo: function() {
         const c = document.createElement('canvas');
         const cx = c.getContext('2d');
@@ -143,7 +141,6 @@ const App = {
         const imgData = cx.getImageData(0, 0, c.width, c.height);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
-            // 偵測深色背景轉透明 [cite: 2025-12-28]
             if (d[i] < 60 && d[i+1] < 60 && d[i+2] < 60) d[i+3] = 0;
         }
         cx.putImageData(imgData, 0, 0);
@@ -159,7 +156,6 @@ const App = {
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = 720; exportCanvas.height = 1280;
         const eCtx = exportCanvas.getContext('2d');
-        
         const stream = exportCanvas.captureStream(30);
         const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 15000000 });
         const chunks = [];
@@ -168,7 +164,7 @@ const App = {
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_3D_Fixed.webm`; a.click();
+            a.href = URL.createObjectURL(blob); a.download = `Train_3D.webm`; a.click();
             btn.innerText = "錄製影片"; btn.disabled = false;
             this.toast.style.opacity = "1";
             setTimeout(() => this.toast.style.opacity = "0", 3000);
@@ -198,11 +194,10 @@ const App = {
                     eCtx.restore();
                 }
 
-                // 片尾 Logo 導出 (結束前 2 秒)
                 if (cur >= (this.v.duration || 5.5) - 2) {
                     eCtx.save();
                     const logoW = 180; const logoH = logoW * (processedLogo.height / processedLogo.width);
-                    eCtx.drawImage(processedLogo, 720 - logoW - 40, 1280 - logoH - 100, logoW, logoH);
+                    eCtx.drawImage(processedLogo, 720 - logoW - 40, 1280 - logoH - 100, logoW, lh = logoH);
                     eCtx.restore();
                 }
                 
