@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 最終修正</title>
+    <title>地鐵留言 App - 最終校準版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -13,7 +13,7 @@
         
         #canvas-image { 
             position: absolute; top: 0; left: 0; 
-            width: 1000px; height: 400px; /* 加寬畫布解決邊界問題 */
+            width: 1200px; height: 400px; /* 增加寬度緩衝 */
             transform-origin: 0 0; 
             clip-path: inset(0 0 0 100%); 
             filter: drop-shadow(4px 4px 12px rgba(0,0,0,0.6)); 
@@ -23,8 +23,7 @@
 
         .ui-bar { background: #1a1a1a; padding: 20px; display: flex; gap: 10px; z-index: 200; border-top: 1px solid #333; }
         input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
-        button { background: #ff3b30; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
-        button:active { transform: scale(0.95); background: #d32f2f; }
+        button { background: #ff3b30; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -47,18 +46,18 @@
 
 <script>
 /**
- * 針對「字體過大爆框」與「出現太快」優化
+ * 針對「兩邊被切」與「出現太早」優化
  */
 const App = {
-    // 稍微向內收縮一點座標，確保不超過綠幕邊界
+    // 根據回報座標微調，確保在綠幕內部
     pts: [
-        {x: 0.0800, y: 0.3950}, // 左上
-        {x: 0.9350, y: 0.2950}, // 右上
-        {x: 0.9150, y: 0.6900}, // 右下
-        {x: 0.0700, y: 0.5250}  // 左下
+        {x: 0.0800, y: 0.3950}, 
+        {x: 0.9350, y: 0.2950}, 
+        {x: 0.9150, y: 0.6900}, 
+        {x: 0.0700, y: 0.5250}  
     ],
-    // 調整時間：延後開始(2.28s)，拉長持續時間至 3.73s 結束
-    timing: { start: 2.28, end: 3.73 }, 
+    // 延後開始時間，保持結束時間
+    timing: { start: 2.40, end: 3.73 }, 
     
     video: document.getElementById('bg-video'),
     img: document.getElementById('canvas-image'),
@@ -70,7 +69,7 @@ const App = {
 
     updateWarp: function() {
         const rect = document.getElementById('stage').getBoundingClientRect();
-        const w = 1000, h = 400; // 統一渲染解析度
+        const w = 1200, h = 400; 
         const p = this.pts.map(pt => ({ x: pt.x * rect.width, y: pt.y * rect.height }));
         const m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${m.join(',')})`;
@@ -87,8 +86,8 @@ const App = {
             const dur = this.timing.end - this.timing.start;
             
             if (now >= this.timing.start && now <= this.timing.end) {
-                // 使用平滑曲線，讓文字跟隨車尾更穩定
                 let progress = (now - this.timing.start) / dur;
+                // 確保揭開速度與車速匹配
                 this.img.style.clipPath = `inset(0 0 0 ${100 - (progress * 100)}%)`;
             } else if (now > this.timing.end) {
                 this.img.style.clipPath = 'inset(0 0 0 0%)';
@@ -103,15 +102,24 @@ const App = {
     renderText: function(text) {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
-        cvs.width = 1000; cvs.height = 400;
-        ctx.clearRect(0, 0, 1000, 400);
-        ctx.fillStyle = '#e60000'; // 稍深一點的紅色更自然
-        // 字體加大並加入水平間距優化
-        ctx.font = '900 250px "Microsoft JhengHei", sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const w = 1200, h = 400;
+        cvs.width = w; cvs.height = h;
+        ctx.clearRect(0, 0, w, h);
         
-        // 使用高度 50% 確保垂直置中
-        ctx.fillText(text, 500, 200);
+        ctx.fillStyle = '#e60000';
+        let fontSize = 250;
+        ctx.font = `900 ${fontSize}px "Microsoft JhengHei", sans-serif`;
+        
+        // 自動縮小字體以適應寬度，避免兩邊被切掉
+        const maxWidth = w * 0.9;
+        while (ctx.measureText(text).width > maxWidth && fontSize > 50) {
+            fontSize -= 10;
+            ctx.font = `900 ${fontSize}px "Microsoft JhengHei", sans-serif`;
+        }
+        
+        ctx.textAlign = 'center'; 
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, w / 2, h / 2);
         this.img.src = cvs.toDataURL();
     },
 
