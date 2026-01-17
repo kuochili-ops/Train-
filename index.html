@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 瘦長震撼版</title>
+    <title>地鐵 3D 透視修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 2000px; }
+        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 1500px; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
         
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
-            transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
-            mix-blend-mode: multiply; opacity: 0.95;
+            transform-origin: 0 0; 
+            clip-path: inset(0 0 0 100%); 
+            mix-blend-mode: multiply; opacity: 0.92;
+            pointer-events: none;
         }
 
         #kuo-end-img {
@@ -22,27 +24,27 @@
         }
 
         .ui-bar { 
-            background: rgba(26, 26, 26, 0.95); padding: 15px; 
+            background: rgba(20, 20, 20, 0.98); padding: 15px; 
             display: flex; flex-direction: column; gap: 10px; 
-            z-index: 500; border-top: 1px solid #333;
-            transition: transform 0.3s ease;
+            z-index: 500; border-top: 1px solid #444;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .ui-bar.collapsed { transform: translateY(100%); position: absolute; bottom: 0; width: 100%; box-sizing: border-box; }
 
         .row { display: flex; gap: 8px; align-items: center; }
-        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
-        input[type="color"] { width: 50px; height: 45px; border: none; background: none; cursor: pointer; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #555; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
+        input[type="color"] { width: 45px; height: 45px; border: none; background: none; cursor: pointer; border-radius: 50%; }
         
-        button { padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; min-width: 60px; }
-        .preview-btn { background: #444; color: white; }
-        .rec-btn { background: #FF3B30; color: #fff; }
+        button { padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; min-width: 65px; transition: 0.2s; }
+        .preview-btn { background: #333; color: white; }
+        .rec-btn { background: #E02020; color: #fff; }
         .share-btn { background: #007AFF; color: white; }
-        .toggle-ui { position: absolute; top: -40px; right: 15px; background: rgba(0,0,0,0.6); color: #fff; padding: 5px 15px; border-radius: 8px 8px 0 0; font-size: 12px; }
+        .toggle-ui { position: absolute; top: -35px; right: 20px; background: rgba(20,20,20,0.9); color: #ccc; padding: 4px 12px; border-radius: 6px 6px 0 0; font-size: 11px; border: 1px solid #444; border-bottom: none; }
 
         #status-toast { 
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: #4cd964; color: white; padding: 10px 25px; border-radius: 12px;
-            z-index: 2000; opacity: 0; transition: 0.4s ease; pointer-events: none;
+            background: #28a745; color: white; padding: 10px 25px; border-radius: 50px;
+            z-index: 2000; opacity: 0; transition: 0.4s; pointer-events: none; font-size: 14px;
         }
 
         body.share-mode .ui-bar { display: none !important; }
@@ -50,24 +52,24 @@
 </head>
 <body>
 
-<div id="status-toast">已複製分享連結！</div>
+<div id="status-toast">分享連結已複製！</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
-        <div id="warp-layer"><img id="canvas-image"></div>
+        <img id="canvas-image">
         <img id="kuo-end-img" src="IMG_6604.png">
     </div>
 
     <div class="ui-bar" id="mainUI">
-        <button class="toggle-ui" onclick="document.getElementById('mainUI').classList.toggle('collapsed')">收合/展開介面</button>
+        <button class="toggle-ui" onclick="document.getElementById('mainUI').classList.toggle('collapsed')">收合介面</button>
         <div class="row">
-            <input type="color" id="textColor" value="#e60000">
-            <input type="text" id="userInput" placeholder="輸入內容 (瘦長震撼字體)">
+            <input type="color" id="textColor" value="#d10000">
+            <input type="text" id="userInput" placeholder="輸入內容 (一行最多6字，自動瘦長)">
         </div>
         <div class="row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
-            <button class="share-btn" onclick="App.generateShareUrl()">分享連結</button>
+            <button class="share-btn" onclick="App.generateShareUrl()">產生分享</button>
             <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製</button>
         </div>
     </div>
@@ -77,9 +79,12 @@
 
 <script>
 const App = {
+    // 修正後的透視頂點，確保貼合綠板區域
     pts: [
-        {x: -0.05, y: 0.35}, {x: 1.05, y: 0.22}, 
-        {x: 1.05, y: 0.78}, {x: -0.05, y: 0.60}
+        {x: 0.10, y: 0.38}, // 左上
+        {x: 0.90, y: 0.28}, // 右上
+        {x: 0.88, y: 0.75}, // 右下
+        {x: 0.08, y: 0.55}  // 左下
     ],
     timing: { start: 2.55, end: 3.83 }, 
     
@@ -107,6 +112,7 @@ const App = {
         const r = document.getElementById('stage').getBoundingClientRect();
         const w = 1800, h = 800;
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
+        // 重新計算透視變換矩陣
         this.m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${this.m.join(',')})`;
     },
@@ -116,8 +122,9 @@ const App = {
         const clr = this.colorPicker.value.replace('#', '');
         const shareUrl = `${window.location.origin}${window.location.pathname}?msg=${msg}&clr=${clr}`;
         navigator.clipboard.writeText(shareUrl).then(() => {
-            document.getElementById('status-toast').style.opacity = "1";
-            setTimeout(() => document.getElementById('status-toast').style.opacity = "0", 3000);
+            const toast = document.getElementById('status-toast');
+            toast.style.opacity = "1";
+            setTimeout(() => toast.style.opacity = "0", 3000);
         });
     },
 
@@ -138,31 +145,27 @@ const App = {
         if (text.includes('/')) {
             lines = text.split('/');
         } else {
-            // 固定 6 個字換行
             for (let i = 0; i < text.length; i += 6) lines.push(text.substring(i, i + 6));
         }
 
-        // 字體比例關鍵：瘦 (0.7) 且 高 (1.5)
-        let stretchX = 0.72; 
-        let stretchY = 1.6;
-        let baseFontSize = 380; 
-        let finalFontSize = baseFontSize / (lines.length > 1 ? lines.length * 0.8 : 1);
-        
+        // 核心修正：在 Canvas 內部進行「瘦長化」渲染，不干擾外部 Matrix3D
         ctx.save();
-        // 靠右對齊點
-        ctx.translate(1750, 400); 
-        ctx.scale(stretchX, stretchY); // 執行瘦長變換 [cite: 2026-01-18]
-        
         ctx.fillStyle = this.colorPicker.value;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        // 使用極粗體字型
-        ctx.font = `900 ${finalFontSize}px "Arial Black", "Impact", "Microsoft JhengHei", sans-serif`;
+        
+        // 根據行數動態縮放
+        let baseSize = 420;
+        let finalSize = baseSize / (lines.length > 1 ? lines.length * 0.85 : 1);
+        
+        // 套用瘦長比例：水平壓縮至 0.75，垂直拉長至 1.4
+        ctx.translate(1750, 400); 
+        ctx.scale(0.75, 1.4); [cite: 2026-01-18]
 
         lines.forEach((line, i) => {
-            // Y 軸位移需除以 stretchY 以保持計算正確
-            const yOffset = (i - (lines.length - 1) / 2) * (finalFontSize * 0.85);
-            ctx.fillText(line, 0, yOffset / stretchY);
+            const yOffset = (i - (lines.length - 1) / 2) * (finalSize * 0.9);
+            ctx.font = `900 ${finalSize}px "Arial Black", "Impact", sans-serif`;
+            ctx.fillText(line, 0, yOffset / 1.4);
         });
         ctx.restore();
 
@@ -171,7 +174,8 @@ const App = {
 
     animate: function() {
         const cur = this.v.currentTime;
-        this.logoImg.style.opacity = (cur >= (this.v.duration || 5.5) - 2) ? '1' : '0';
+        this.logoImg.style.opacity = (cur >= (this.v.duration || 5.5) - 1.8) ? '1' : '0';
+        
         const clipDur = this.timing.end - this.timing.start;
         if (cur >= this.timing.start && cur <= this.timing.end) {
             const prog = (cur - this.timing.start) / clipDur;
@@ -186,19 +190,19 @@ const App = {
 
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
-        btn.innerText = "..."; btn.disabled = true;
+        btn.innerText = "●"; btn.disabled = true;
         this.renderOffscreenText();
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = 720; exportCanvas.height = 1280;
         const eCtx = exportCanvas.getContext('2d');
         const stream = exportCanvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 15000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 12000000 });
         const chunks = [];
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_Slim.webm`; a.click();
+            a.href = URL.createObjectURL(blob); a.download = `Train_3D_Fixed.webm`; a.click();
             btn.innerText = "錄製"; btn.disabled = false;
         };
         this.v.currentTime = 0; await this.v.play(); recorder.start();
