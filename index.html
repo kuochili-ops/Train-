@@ -3,34 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 最終同步完成版</title>
+    <title>地鐵留言 App - 視覺優化版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        
-        .viewport { 
-            position: relative; flex: 1; background: #111; overflow: hidden; 
-            perspective: 1200px; /* 增加場景透視深度 */
-        }
-        
+        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 1200px; }
         video#bg-video { width: 100%; height: 100%; object-fit: cover; }
-
-        #warp-layer { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            z-index: 10; pointer-events: none; 
-            transform-style: preserve-3d;
-        }
-
+        #warp-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; transform-style: preserve-3d; }
         #canvas-image { 
-            position: absolute; top: 0; left: 0; 
-            width: 800px; height: 300px; 
-            transform-origin: 0 0; 
-            clip-path: inset(0 0 0 100%); 
-            filter: drop-shadow(2px 2px 10px rgba(0,0,0,0.5));
-            opacity: 0.98;
-            will-change: transform, clip-path;
+            position: absolute; top: 0; left: 0; width: 800px; height: 400px; /* 加高畫布容納大字 */
+            transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
+            filter: drop-shadow(2px 2px 10px rgba(0,0,0,0.5)); opacity: 0.98;
         }
-
         .ui-bar { background: #1a1a1a; padding: 20px; display: flex; gap: 10px; z-index: 200; border-top: 1px solid #333; }
         input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
         button { background: #e60000; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
@@ -46,26 +30,25 @@
         </video>
         <div id="warp-layer"><img id="canvas-image"></div>
     </div>
-
     <div class="ui-bar">
         <input type="text" id="userInput" value="白六愛媽媽">
-        <button onclick="App.play()">播放效果</button>
+        <button onclick="App.play()">執行播放</button>
     </div>
 </div>
 
 <canvas id="temp-cvs" style="display:none;"></canvas>
 
 <script>
+/**
+ * 視覺微調 [cite: 2025-12-19, 2025-12-28]
+ */
 const App = {
-    // 您回報的座標
     pts: [
-        {x: 0.0720, y: 0.3928}, // 左上
-        {x: 0.9413, y: 0.2886}, // 右上
-        {x: 0.9200, y: 0.6994}, // 右下
-        {x: 0.0613, y: 0.5291}  // 左下
+        {x: 0.0720, y: 0.3928}, {x: 0.9413, y: 0.2886}, 
+        {x: 0.9200, y: 0.6994}, {x: 0.0613, y: 0.5291}
     ],
-    // 確定的時間參數
-    timing: { start: 1.92, end: 3.11 },
+    // 延後出現時間
+    timing: { start: 2.05, end: 3.24 }, 
     
     video: document.getElementById('bg-video'),
     img: document.getElementById('canvas-image'),
@@ -77,35 +60,29 @@ const App = {
 
     updateWarp: function() {
         const rect = document.getElementById('stage').getBoundingClientRect();
-        const w = 800, h = 300;
+        const w = 800, h = 400;
         const p = this.pts.map(pt => ({ x: pt.x * rect.width, y: pt.y * rect.height }));
-
-        // 計算更精確的透視矩陣
-        const matrix = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        this.img.style.transform = `matrix3d(${matrix.join(',')})`;
+        const m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
 
     play: function() {
         this.render(document.getElementById('userInput').value);
         this.updateWarp();
-        
         this.video.currentTime = 0;
         this.video.play();
 
         const sync = () => {
             const now = this.video.currentTime;
-            const duration = this.timing.end - this.timing.start;
-            
+            const dur = this.timing.end - this.timing.start;
             if (now >= this.timing.start && now <= this.timing.end) {
-                const progress = (now - this.timing.start) / duration;
-                // 揭曉進度同步
-                this.img.style.clipPath = `inset(0 0 0 ${100 - (progress * 100)}%)`;
+                const prog = (now - this.timing.start) / dur;
+                this.img.style.clipPath = `inset(0 0 0 ${100 - (prog * 100)}%)`;
             } else if (now > this.timing.end) {
                 this.img.style.clipPath = 'inset(0 0 0 0%)';
             } else {
                 this.img.style.clipPath = 'inset(0 0 0 100%)';
             }
-
             if (!this.video.paused && !this.video.ended) requestAnimationFrame(sync);
         };
         requestAnimationFrame(sync);
@@ -114,17 +91,17 @@ const App = {
     render: function(text) {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
-        cvs.width = 800; cvs.height = 300;
-        ctx.clearRect(0, 0, 800, 300);
+        cvs.width = 800; cvs.height = 400;
+        ctx.clearRect(0, 0, 800, 400);
         ctx.fillStyle = '#ff0000';
-        ctx.font = '900 160px sans-serif';
+        // 字體加大至 220px
+        ctx.font = '900 220px "Microsoft JhengHei", sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(text, 400, 150);
+        ctx.fillText(text, 400, 200);
         this.img.src = cvs.toDataURL();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
-        // 使用更嚴謹的單應性矩陣解法
         const a = [
             [x1, y1, 1, 0, 0, 0, -px1*x1, -px1*y1], [0, 0, 0, x1, y1, 1, -py1*x1, -py1*y1],
             [x2, y2, 1, 0, 0, 0, -px2*x2, -px2*y2], [0, 0, 0, x2, y2, 1, -py2*x2, -py2*y2],
@@ -132,14 +109,11 @@ const App = {
             [x4, y4, 1, 0, 0, 0, -px4*x4, -px4*y4], [0, 0, 0, x4, y4, 1, -py4*x4, -py4*y4]
         ];
         const b = [px1, py1, px2, py2, px3, py3, px4, py4];
-        
-        // 高斯消去法解線性方程組
         const n = 8;
         for (let i=0; i<n; i++) {
             let max = i;
             for (let j=i+1; j<n; j++) if (Math.abs(a[j][i]) > Math.abs(a[max][i])) max = j;
-            [a[i], a[max]] = [a[max], a[i]];
-            [b[i], b[max]] = [b[max], b[i]];
+            [a[i], a[max]] = [a[max], a[i]]; [b[i], b[max]] = [b[max], b[i]];
             for (let j=i+1; j<n; j++) {
                 const f = a[j][i] / a[i][i];
                 b[j] -= f * b[i];
@@ -155,7 +129,6 @@ const App = {
         return [x[0], x[3], 0, x[6], x[1], x[4], 0, x[7], 0, 0, 1, 0, x[2], x[5], 0, 1];
     }
 };
-
 window.onload = () => App.init();
 </script>
 </body>
