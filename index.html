@@ -3,135 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>白六留言 App</title>
+    <title>白六留言 App - 物理對位版</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; font-family: sans-serif; overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         
-        .app-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-
-        /* 影片視窗 */
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; }
-        
-        video#train-video { 
-            width: 100%; height: 100%; object-fit: cover; 
-            /* 預設隱藏直到影片載入完成 */
-            background: url('image.png') no-repeat center center;
-            background-size: cover;
+        /* App 整體容器 */
+        .app-shell {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
-        /* 物理透視層 */
-        .wall-perspective {
+        /* 影片視窗：確保 z-index 在底層 */
+        .viewport {
+            position: relative;
+            flex: 1;
+            background: #000;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* 物理留言板模組：處理透視與遮罩 */
+        .metro-board-module {
             position: absolute;
-            top: 25%; /* 對齊綠板高度 */
+            top: 25%; /* 根據你的截圖對齊綠板高度 */
             left: 0;
             width: 100%;
-            height: 35%;
+            height: 40%;
             z-index: 10;
-            perspective: 1200px;
+            perspective: 1200px; /* 強化遠近感 */
             pointer-events: none;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        /* 模組化遮罩：文字在此原地不動 */
-        .trapezoid-mask {
-            width: 100%; height: 100%;
-            display: flex; align-items: center; justify-content: center;
-            /* 針對你截圖中的綠板斜度進行 3D 校正 */
+        /* 梯形面板：讓文字右大左小，貼合綠板 */
+        .trapezoid-panel {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* 物理參數：rotateY 是深度，skewY 是平行校正 */
             transform: rotateY(-48deg) skewY(-7deg) translateX(40px);
             transform-origin: center right;
-            clip-path: inset(0 0 0 100%); /* 初始隱藏 */
+            
+            /* 核心揭曉機制：inset(上 右 下 左) */
+            /* 初始狀態左側邊界為 100%，代表文字完全被「隱形門簾」遮住 */
+            clip-path: inset(0 0 0 100%); 
         }
 
-        .red-message {
-            color: #ff0000;
+        .wall-text {
+            color: #ff0000; /* 使用你要求的紅色 */
             font-size: 5rem;
             font-weight: 900;
             white-space: nowrap;
             letter-spacing: 5px;
-            filter: blur(0.5px) drop-shadow(4px 4px 8px rgba(0,0,0,0.6));
+            /* 增加環境融合濾鏡 */
+            filter: blur(0.4px) drop-shadow(4px 4px 8px rgba(0,0,0,0.5));
             opacity: 0.95;
         }
 
-        /* 下方輸入介面 */
-        .ui-bar {
+        /* App 輸入介面 */
+        .input-bar {
             background: #111;
             padding: 15px;
             display: flex;
             gap: 10px;
+            z-index: 20;
             border-top: 1px solid #333;
         }
 
         input { flex: 1; background: #222; border: none; color: #fff; padding: 12px; border-radius: 20px; outline: none; }
-        button { background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; }
+        button { background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div class="app-container">
+<div class="app-shell">
     <div class="viewport">
-        <video id="train-video" playsinline muted preload="auto">
-            <source src="Train.mp4" type="video/mp4">
+        <video id="train-video" playsinline muted>
             <source src="Train.mov" type="video/quicktime">
+            <source src="Train.mov" type="video/mp4">
         </video>
 
-        <div class="wall-perspective">
-            <div id="physics-gate" class="trapezoid-mask">
-                <div id="app-text" class="red-message">白六愛媽媽</div>
+        <div class="metro-board-module">
+            <div id="mask-gate" class="trapezoid-panel">
+                <div id="display-text" class="wall-text">白六愛媽媽</div>
             </div>
         </div>
     </div>
 
-    <div class="ui-bar">
-        <input type="text" id="userInput" value="白六愛媽媽">
-        <button onclick="MetroApp.play()">播放</button>
+    <div class="input-bar">
+        <input type="text" id="userInput" placeholder="輸入留言..." value="白六愛媽媽">
+        <button onclick="MetroModule.play()">播放</button>
     </div>
 </div>
 
 <script>
-    // 將功能模組化 (Module)
-    const MetroApp = {
-        video: document.getElementById('train-video'),
-        gate: document.getElementById('physics-gate'),
-        text: document.getElementById('app-text'),
-        input: document.getElementById('userInput'),
-        config: { start: 3.51, end: 4.9 },
-
-        play: function() {
-            this.text.innerText = this.input.value;
-            
-            // 重置影片與遮罩
-            this.video.currentTime = 0;
-            this.gate.style.clipPath = 'inset(0 0 0 100%)';
-            
-            // 嘗試播放，若失敗則在 Console 報錯
-            const playPromise = this.video.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.log("自動播放被攔截，請點擊頁面後再試一次。");
-                });
-            }
-
-            this.sync();
+    // 封裝成模組，方便之後調用
+    const MetroModule = {
+        config: {
+            revealStart: 3.51, // 列車尾部開始露出綠板
+            revealEnd: 4.90    // 列車完全離開畫面
         },
 
-        sync: function() {
-            const update = () => {
-                const now = this.video.currentTime;
-                if (now >= this.config.start && now <= this.config.end) {
-                    const progress = (now - this.config.start) / (this.config.end - this.config.start);
-                    // 遮罩從 100% (右) 往 0% (左) 移動，達成揭曉感
-                    this.gate.style.clipPath = `inset(0 0 0 ${100 - (progress * 100)}%)`;
-                } else if (now > this.config.end) {
-                    this.gate.style.clipPath = 'inset(0 0 0 0%)';
+        play: function() {
+            const video = document.getElementById('train-video');
+            const gate = document.getElementById('mask-gate');
+            const text = document.getElementById('display-text');
+            const input = document.getElementById('userInput');
+
+            // 1. 更新內容與重置狀態
+            text.innerText = input.value;
+            gate.style.transition = 'none';
+            gate.style.clipPath = 'inset(0 0 0 100%)';
+            
+            // 2. 播放影片
+            video.currentTime = 0;
+            video.play();
+
+            // 3. 同步遮罩揭曉
+            const sync = () => {
+                const now = video.currentTime;
+                
+                if (now >= this.config.revealStart && now <= this.config.revealEnd) {
+                    const progress = (now - this.config.revealStart) / (this.config.revealEnd - this.config.revealStart);
+                    // 遮罩邊界由 100% 變為 0%，文字在原地顯現，不會跟隨火車移動
+                    const revealLeft = 100 - (progress * 100);
+                    gate.style.clipPath = `inset(0 0 0 ${revealLeft}%)`;
+                } else if (now > this.config.revealEnd) {
+                    gate.style.clipPath = 'inset(0 0 0 0%)';
                 }
 
-                if (!this.video.paused && !this.video.ended) {
-                    requestAnimationFrame(update);
+                if (!video.paused && !video.ended) {
+                    requestAnimationFrame(sync);
                 }
             };
-            requestAnimationFrame(update);
+            requestAnimationFrame(sync);
         }
     };
 </script>
