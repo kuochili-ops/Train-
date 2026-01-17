@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 震撼分享版 - 極致擴張</title>
+    <title>地鐵 3D 瘦長震撼版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -63,7 +63,7 @@
         <button class="toggle-ui" onclick="document.getElementById('mainUI').classList.toggle('collapsed')">收合/展開介面</button>
         <div class="row">
             <input type="color" id="textColor" value="#e60000">
-            <input type="text" id="userInput" placeholder="輸入內容 (單行限6字/自動換行)">
+            <input type="text" id="userInput" placeholder="輸入內容 (瘦長震撼字體)">
         </div>
         <div class="row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
@@ -77,12 +77,9 @@
 
 <script>
 const App = {
-    // 再次向外擴張邊界，達到全螢幕震撼效果
     pts: [
-        {x: -0.05, y: 0.35}, // 左上 (擴張)
-        {x: 1.05, y: 0.22},  // 右上 (擴張)
-        {x: 1.05, y: 0.78},  // 右下 (擴張)
-        {x: -0.05, y: 0.60}  // 左下 (擴張)
+        {x: -0.05, y: 0.35}, {x: 1.05, y: 0.22}, 
+        {x: 1.05, y: 0.78}, {x: -0.05, y: 0.60}
     ],
     timing: { start: 2.55, end: 3.83 }, 
     
@@ -137,33 +134,35 @@ const App = {
         cvs.width = 1800; cvs.height = 800;
         ctx.clearRect(0,0,1800,800);
 
-        // 每 6 個字換行
         let lines = [];
         if (text.includes('/')) {
             lines = text.split('/');
         } else {
+            // 固定 6 個字換行
             for (let i = 0; i < text.length; i += 6) lines.push(text.substring(i, i + 6));
         }
 
-        // 動態計算高度與寬度
-        let baseFontSize = 350; // 基礎大字體
-        let scaleY = 1.3; // 縱向拉長比例 [cite: 2026-01-18]
-        
-        // 如果行數增加，自動等比例縮小高度
-        let finalFontSize = baseFontSize / (lines.length > 1 ? lines.length * 0.7 : 1);
+        // 字體比例關鍵：瘦 (0.7) 且 高 (1.5)
+        let stretchX = 0.72; 
+        let stretchY = 1.6;
+        let baseFontSize = 380; 
+        let finalFontSize = baseFontSize / (lines.length > 1 ? lines.length * 0.8 : 1);
         
         ctx.save();
-        ctx.translate(1750, 400); // 靠右定位
-        ctx.scale(1, scaleY); // 執行字體拉長 [cite: 2026-01-18]
+        // 靠右對齊點
+        ctx.translate(1750, 400); 
+        ctx.scale(stretchX, stretchY); // 執行瘦長變換 [cite: 2026-01-18]
         
         ctx.fillStyle = this.colorPicker.value;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.font = `900 ${finalFontSize}px "Arial Black", "Microsoft JhengHei", sans-serif`;
+        // 使用極粗體字型
+        ctx.font = `900 ${finalFontSize}px "Arial Black", "Impact", "Microsoft JhengHei", sans-serif`;
 
         lines.forEach((line, i) => {
-            const yOffset = (i - (lines.length - 1) / 2) * (finalFontSize * 0.9);
-            ctx.fillText(line, 0, yOffset / scaleY);
+            // Y 軸位移需除以 stretchY 以保持計算正確
+            const yOffset = (i - (lines.length - 1) / 2) * (finalFontSize * 0.85);
+            ctx.fillText(line, 0, yOffset / stretchY);
         });
         ctx.restore();
 
@@ -195,15 +194,13 @@ const App = {
         const stream = exportCanvas.captureStream(30);
         const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 15000000 });
         const chunks = [];
-
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_UltraWide.webm`; a.click();
+            a.href = URL.createObjectURL(blob); a.download = `Train_Slim.webm`; a.click();
             btn.innerText = "錄製"; btn.disabled = false;
         };
-
         this.v.currentTime = 0; await this.v.play(); recorder.start();
         const startTime = Date.now();
         const renderLoop = () => {
