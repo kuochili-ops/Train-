@@ -3,18 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>白六留言板 - 物理貼合版</title>
+    <title>白六留言板 - 物理擬真版</title>
     <style>
-        body {
-            margin: 0;
-            background: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
-        }
-
+        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        
         .phone-mockup {
             position: relative;
             width: 100%;
@@ -32,85 +24,61 @@
             z-index: 1;
         }
 
-        /* 文字容器：定位於綠色板子的區域 */
-        .wall-overlay {
+        /* 牆面透視層：文字座標必須在此層完全固定 */
+        .wall-perspective {
             position: absolute;
-            top: 28%; /* 根據影片綠板高度調整 */
+            top: 22%; /* 根據影片中綠板的位置 */
             left: 0;
             width: 100%;
-            height: 30%;
+            height: 40%;
             z-index: 2;
-            /* 建立強大的 3D 透視感 */
-            perspective: 1000px;
+            perspective: 1200px; /* 增加透視深度 */
             pointer-events: none;
         }
 
-        /* 梯形變形板：這是關鍵，模擬綠板的物理傾斜 */
-        .trapezoid-surface {
+        /* 模擬牆面的梯形面板 */
+        .trapezoid-panel {
             width: 100%;
             height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
             
-            /* 調整這些數值直到文字看起來平行於軌道與天花板的線條 */
-            /* rotateY: 牆面深度, rotateX: 牆面傾斜, skewY: 修正透視歪斜 */
-            transform: rotateY(-40deg) skewY(-5deg) translateX(20px);
-            transform-origin: center right;
-            
-            /* 初始狀態：使用矩形遮罩完全擋住文字（Inset 的右側為 100%） */
-            /* 隨著車子往左開，我們要讓遮罩的左側邊界往右移動 (Reveal from left to right) */
+            /* 關鍵參數：調整 rotateY 與 skewY 讓文字底邊與導盲磚平行 */
+            transform: rotateY(-45deg) skewY(-6deg) translateX(30px);
+            transform-origin: right center;
+
+            /* 遮罩邏輯：使用 inset。初始時遮住右側 100% 的區域 */
+            /* 隨火車向左開，我們縮減右側遮擋比例 */
             clip-path: inset(0 0 0 100%); 
         }
 
-        .fixed-text {
-            color: rgba(255, 255, 255, 0.85); /* 稍微透明點更像印上去的 */
-            font-size: 2.5rem;
+        .wall-text {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 2.8rem;
             font-weight: 900;
-            letter-spacing: 2px;
             white-space: nowrap;
-            /* 增加一點點模糊，模擬攝影機對焦在遠處牆面 */
-            filter: blur(0.5px) drop-shadow(2px 2px 2px rgba(0,0,0,0.3));
+            /* 加上輕微模糊模擬環境質感 */
+            filter: blur(0.4px) drop-shadow(2px 2px 4px rgba(0,0,0,0.4));
         }
 
-        /* UI 層 */
-        .ui-layer {
+        /* UI */
+        .ui-panel {
             position: absolute;
             bottom: 30px;
-            width: 100%;
-            display: flex;
-            justify-content: center;
+            width: 85%;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 10;
-        }
-
-        .input-group {
             display: flex;
-            background: rgba(255,255,255,0.1);
-            backdrop-filter: blur(15px);
-            padding: 8px 15px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+            padding: 8px;
             border-radius: 30px;
-            border: 1px solid rgba(255,255,255,0.2);
-            width: 80%;
         }
 
-        input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: white;
-            outline: none;
-            font-size: 1rem;
-        }
-
-        button {
-            background: #fff;
-            color: #000;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-weight: bold;
-            cursor: pointer;
-        }
+        input { flex: 1; background: transparent; border: none; color: white; padding-left: 15px; outline: none; }
+        button { background: #4CAF50; border: none; color: white; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -121,63 +89,57 @@
         <source src="Train.mov" type="video/mp4">
     </video>
 
-    <div class="wall-overlay">
-        <div id="mask-gate" class="trapezoid-surface">
-            <div id="final-text" class="fixed-text">白六愛媽媽</div>
+    <div class="wall-perspective">
+        <div id="mask-layer" class="trapezoid-panel">
+            <div id="display-text" class="wall-text">白六愛媽媽</div>
         </div>
     </div>
 
-    <div class="ui-layer">
-        <div class="input-group">
-            <input type="text" id="userInput" value="白六愛媽媽">
-            <button onclick="runReveal()">播放</button>
-        </div>
+    <div class="ui-panel">
+        <input type="text" id="userInput" value="白六愛媽媽">
+        <button onclick="playEffect()">播放</button>
     </div>
 </div>
 
 <script>
     const video = document.getElementById('train-video');
-    const maskGate = document.getElementById('mask-gate');
-    const finalText = document.getElementById('final-text');
+    const mask = document.getElementById('mask-layer');
+    const text = document.getElementById('display-text');
     const input = document.getElementById('userInput');
 
-    function runReveal() {
-        // 更新文字
-        finalText.innerText = input.value;
+    function playEffect() {
+        text.innerText = input.value;
         
-        // 重置狀態：遮罩設為 100% (完全遮住)
-        maskGate.style.transition = 'none';
-        maskGate.style.clipPath = 'inset(0 0 0 100%)';
+        // 重置：完全遮蔽
+        mask.style.transition = 'none';
+        mask.style.clipPath = 'inset(0 0 0 100%)';
         
         video.currentTime = 0;
         video.play();
 
-        // 關鍵時間點設定 (依據你的影片觀察)
-        const revealStart = 3.51; // 列車尾部開始露出綠板
-        const revealEnd = 5.0;    // 列車完全駛離畫面
+        // 觀察影片：列車尾巴在 3.51 秒開始露出綠板，約在 4.8 秒完全駛離
+        const startReveal = 3.51;
+        const endReveal = 4.8;
 
-        const updateLoop = () => {
-            const now = video.currentTime;
-
-            if (now >= revealStart && now <= revealEnd) {
-                // 計算進度 (從 0 到 1)
-                const progress = (now - revealStart) / (revealEnd - revealStart);
-                
-                // 遮罩從 100% 減少到 0%
-                // 注意：這裡的進度是讓 clip-path 的左邊界(left) 向右推移，
-                // 或者更簡單：讓 inset 的左側百分比根據進度變化
-                const revealPercent = 100 - (progress * 100);
-                maskGate.style.clipPath = `inset(0 0 0 ${revealPercent}%)`;
-            } else if (now > revealEnd) {
-                maskGate.style.clipPath = 'inset(0 0 0 0%)';
+        const syncReveal = () => {
+            const time = video.currentTime;
+            
+            if (time >= startReveal && time <= endReveal) {
+                // 計算進度 0 -> 1
+                const progress = (time - startReveal) / (endReveal - startReveal);
+                // 遮罩右側百分比從 100% 降到 0%
+                const revealVal = 100 - (progress * 100);
+                mask.style.clipPath = `inset(0 0 0 ${revealVal}%)`;
+            } else if (time > endReveal) {
+                mask.style.clipPath = 'inset(0 0 0 0%)';
             }
 
             if (!video.paused && !video.ended) {
-                requestAnimationFrame(updateLoop);
+                requestAnimationFrame(syncReveal);
             }
         };
 
-        requestAnimationFrame(updateLoop);
+        requestAnimationFrame(syncReveal);
     }
 </script>
 
