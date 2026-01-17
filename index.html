@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 邊界對位版</title>
+    <title>地鐵留言 App - 最終對位版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -19,8 +19,7 @@
         #kuo-end-img {
             position: absolute; bottom: 80px; right: 25px; width: 130px;
             z-index: 999; opacity: 0; transition: opacity 0.8s ease; 
-            pointer-events: none;
-            mix-blend-mode: screen;
+            pointer-events: none; mix-blend-mode: screen;
         }
 
         .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
@@ -51,7 +50,7 @@
 
     <div class="ui-bar">
         <div class="row">
-            <input type="text" id="userInput" value="新年快樂/2026">
+            <input type="text" id="userInput" placeholder="輸入文字 (過長會自動分行)">
             <button class="preview-btn" onclick="App.play()">預覽</button>
             <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製影片</button>
         </div>
@@ -62,12 +61,12 @@
 
 <script>
 const App = {
-    // 左右兩邊內移：將 X 軸從原先的 (-0.10, 1.10) 修正回更集中的區域
+    // 左右邊界再次內移，確保文字更集中
     pts: [
-        {x: 0.05, y: 0.38}, // 左上 (內移)
-        {x: 0.95, y: 0.26}, // 右上 (內移)
-        {x: 0.92, y: 0.74}, // 右下 (內移)
-        {x: 0.02, y: 0.55}  // 左下 (內移)
+        {x: 0.12, y: 0.40}, // 左上
+        {x: 0.88, y: 0.30}, // 右上
+        {x: 0.86, y: 0.70}, // 右下
+        {x: 0.10, y: 0.52}  // 左下
     ],
     timing: { start: 2.55, end: 3.83 }, 
     
@@ -97,19 +96,36 @@ const App = {
         this.v.play();
     },
 
+    // 支援自動換行與手動分行的邏輯
     renderOffscreenText: function() {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
-        const text = this.input.value;
+        let text = this.input.value || "地鐵留言";
         cvs.width = 1800; cvs.height = 800;
         ctx.clearRect(0,0,1800,800);
-        let lines = text.includes('/') ? text.split('/') : [text];
-        let fontSize = lines.length > 1 ? 160 : 260; // 稍微調整字體以配合區域
+
+        // 1. 處理分行
+        let lines = [];
+        if (text.includes('/')) {
+            lines = text.split('/');
+        } else {
+            // 自動分行：每 5 個字切一橫 (可根據需求調整)
+            for (let i = 0; i < text.length; i += 5) {
+                lines.push(text.substring(i, i + 5));
+            }
+        }
+
+        // 2. 決定字級
+        let fontSize = lines.length > 1 ? 160 : 260;
+        if (lines.length > 2) fontSize = 120; // 超過三行自動縮小
+
         ctx.fillStyle = '#e60000';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = `900 ${fontSize}px sans-serif`;
+
+        // 3. 繪製多行
         lines.forEach((line, i) => {
-            const y = 400 + (i - (lines.length-1)/2) * (fontSize * 1.1);
+            const y = 400 + (i - (lines.length - 1) / 2) * (fontSize * 1.2);
             ctx.fillText(line, 900, y);
         });
         this.img.src = cvs.toDataURL();
@@ -135,8 +151,8 @@ const App = {
     getProcessedLogo: function() {
         const c = document.createElement('canvas');
         const cx = c.getContext('2d');
-        c.width = this.logoImg.naturalWidth;
-        c.height = this.logoImg.naturalHeight;
+        c.width = this.logoImg.naturalWidth || 1;
+        c.height = this.logoImg.naturalHeight || 1;
         cx.drawImage(this.logoImg, 0, 0);
         const imgData = cx.getImageData(0, 0, c.width, c.height);
         const d = imgData.data;
@@ -164,7 +180,7 @@ const App = {
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_3D.webm`; a.click();
+            a.href = URL.createObjectURL(blob); a.download = `Train_Final_Export.webm`; a.click();
             btn.innerText = "錄製影片"; btn.disabled = false;
             this.toast.style.opacity = "1";
             setTimeout(() => this.toast.style.opacity = "0", 3000);
@@ -197,7 +213,7 @@ const App = {
                 if (cur >= (this.v.duration || 5.5) - 2) {
                     eCtx.save();
                     const logoW = 180; const logoH = logoW * (processedLogo.height / processedLogo.width);
-                    eCtx.drawImage(processedLogo, 720 - logoW - 40, 1280 - logoH - 100, logoW, lh = logoH);
+                    eCtx.drawImage(processedLogo, 720 - logoW - 40, 1280 - logoH - 100, logoW, logoH);
                     eCtx.restore();
                 }
                 
