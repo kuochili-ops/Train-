@@ -3,53 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵隱藏留言 App - 物理同步版</title>
+    <title>地鐵隱藏留言 App - 定位校準版</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
 
-        /* 影片層 */
+        /* 影片區 */
         .viewport { position: relative; flex: 1; background: #111; overflow: hidden; }
         video#bg-video { width: 100%; height: 100%; object-fit: cover; }
 
-        /* 物理對位層：寬度與位置必須精確對應綠板 */
-        .board-overlay {
+        /* 留言板對位層 (這是關鍵框) */
+        .board-container {
             position: absolute;
-            top: 22%;    /* 綠板上緣 % */
-            left: -5%;   /* 稍微向左偏移以補償透視 */
-            width: 110%; /* 擴大寬度以達成滿版 */
-            height: 48%; /* 綠板高度 % */
             z-index: 10;
-            perspective: 1500px;
             pointer-events: none;
             display: flex;
             align-items: center;
             justify-content: center;
+            /* 預設值，之後由滑桿控制 */
+            top: 25%;
+            left: 0;
+            width: 100%;
+            height: 35%;
+            perspective: 1000px;
         }
 
-        /* 滿版梯形變形：模擬您上傳的巨大紅字圖 */
         .warp-panel {
             width: 100%;
             height: 100%;
-            /* 關鍵：使用矩陣變形達成右大左小的物理透視 */
-            transform: matrix3d(1, 0, 0, 0.0008, 0, 1.3, 0, 0, 0, 0, 1, 0, 80, 0, 0, 1) rotateY(-42deg) skewY(-8.5deg);
-            transform-origin: right center;
-            /* 遮罩同步機制 */
+            transform-origin: center right;
             clip-path: inset(0 0 0 100%); 
         }
 
         #canvas-image {
             width: 100%;
             height: 100%;
-            object-fit: fill; /* 強制填滿變形框 */
-            filter: contrast(1.2) drop-shadow(4px 4px 10px rgba(0,0,0,0.8));
-            opacity: 0.98;
+            object-fit: fill;
+            filter: drop-shadow(4px 4px 10px rgba(0,0,0,0.8));
         }
 
-        /* 控制介面 */
-        .ui-bar { background: #111; padding: 15px; display: flex; gap: 10px; z-index: 100; border-top: 1px solid #333; }
-        input { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; outline: none; }
-        button { background: #4CAF50; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: bold; }
+        /* 調校面板 (預設展開，調完可縮小) */
+        .debug-panel {
+            position: absolute;
+            bottom: 80px; left: 10px; right: 10px;
+            background: rgba(0,0,0,0.85);
+            padding: 10px; border-radius: 10px;
+            color: #0f0; font-family: monospace; font-size: 10px;
+            display: grid; grid-template-columns: 1fr 2fr; gap: 5px;
+            z-index: 200;
+        }
+
+        /* UI 控制區 */
+        .ui-bar { background: #111; padding: 15px; display: flex; gap: 10px; z-index: 100; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 5px; }
+        button { background: #4CAF50; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -61,77 +68,87 @@
             <source src="Train.mov" type="video/mp4">
         </video>
 
-        <div class="board-overlay">
+        <div id="board-pos" class="board-container">
             <div id="mask-gate" class="warp-panel">
                 <img id="canvas-image">
             </div>
         </div>
+        
+        <div class="debug-panel" id="debugUI">
+            <label>垂直位置 %</label><input type="range" id="p-top" min="0" max="100" value="25">
+            <label>高度 %</label><input type="range" id="p-height" min="10" max="80" value="35">
+            <label>透視角度</label><input type="range" id="p-rotate" min="-70" max="0" value="-48">
+            <label>傾斜修正</label><input type="range" id="p-skew" min="-20" max="20" value="-8">
+            <label>同步時間</label><input type="range" id="p-start" min="300" max="400" value="351">
+            <div id="current-vals" style="grid-column: span 2; text-align: center;">調校中...</div>
+        </div>
     </div>
 
     <div class="ui-bar">
-        <input type="text" id="userInput" placeholder="輸入留言..." value="白六愛媽媽">
-        <button onclick="App.run()">播放 App 效果</button>
+        <input type="text" id="userInput" value="白六愛媽媽">
+        <button onclick="App.run()">播放</button>
+        <button onclick="document.getElementById('debugUI').style.display='none'" style="background:#555">隱藏調校</button>
     </div>
 </div>
 
-<canvas id="temp-canvas" style="display: none;"></canvas>
+<canvas id="temp-canvas" style="display:none;"></canvas>
 
 <script>
     const App = {
         video: document.getElementById('bg-video'),
         gate: document.getElementById('mask-gate'),
         img: document.getElementById('canvas-image'),
-        input: document.getElementById('userInput'),
         canvas: document.getElementById('temp-canvas'),
-        
-        // 物理同步參數 (請根據測試結果微調這兩個數字)
-        config: { 
-            start: 3.48, // 提前 0.03s 開始，解決肉眼延遲
-            end: 4.85    // 火車完全離開綠板的時間點
-        },
-
-        // 生成超大文字圖以填滿綠板
-        renderText: function(text) {
-            const ctx = this.canvas.getContext('2d');
-            this.canvas.width = 2000;
-            this.canvas.height = 800; // 增加高度比例
-
-            ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            ctx.fillStyle = '#e60000'; // 深紅色噴漆感
-            ctx.font = '900 650px "Microsoft JhengHei", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            
-            // 繪製文字，並稍微加粗
-            ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2);
-            return this.canvas.toDataURL();
-        },
 
         run: function() {
-            this.img.src = this.renderText(this.input.value);
+            // 讀取滑桿數值
+            const top = document.getElementById('p-top').value;
+            const height = document.getElementById('p-height').value;
+            const rotate = document.getElementById('p-rotate').value;
+            const skew = document.getElementById('p-skew').value;
+            const startSec = document.getElementById('p-start').value / 100;
+
+            // 套用位置
+            const container = document.getElementById('board-pos');
+            container.style.top = top + "%";
+            container.style.height = height + "%";
+            this.gate.style.transform = `rotateY(${rotate}deg) skewY(${skew}deg)`;
+            
+            // 顯示數值供以後固定
+            document.getElementById('current-vals').innerText = `TOP:${top} H:${height} ROT:${rotate} SKEW:${skew} START:${startSec}`;
+
+            // 生成圖片
+            this.render(document.getElementById('userInput').value);
+            
+            // 播放
             this.gate.style.clipPath = 'inset(0 0 0 100%)';
             this.video.currentTime = 0;
             this.video.play();
-            this.sync();
+            this.sync(startSec);
         },
 
-        sync: function() {
+        render: function(text) {
+            const ctx = this.canvas.getContext('2d');
+            this.canvas.width = 2000; this.canvas.height = 800;
+            ctx.clearRect(0, 0, 2000, 800);
+            ctx.fillStyle = '#ff0000';
+            ctx.font = '900 600px sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(text, 1000, 400);
+            this.img.src = this.canvas.toDataURL();
+        },
+
+        sync: function(startTime) {
+            const endTime = startTime + 1.4; // 列車通過持續時間約 1.4 秒
             const loop = () => {
                 const now = this.video.currentTime;
-                
-                // 根據火車位置計算遮罩揭開進度
-                if (now >= this.config.start && now <= this.config.end) {
-                    const p = (now - this.config.start) / (this.config.end - this.config.start);
-                    // 100% (隱藏) -> 0% (顯示)
-                    const reveal = 100 - (p * 100);
-                    this.gate.style.clipPath = `inset(0 0 0 ${reveal}%)`;
-                } else if (now > this.config.end) {
+                if (now >= startTime && now <= endTime) {
+                    const p = (now - startTime) / (endTime - startTime);
+                    this.gate.style.clipPath = `inset(0 0 0 ${100 - (p * 100)}%)`;
+                } else if (now > endTime) {
                     this.gate.style.clipPath = 'inset(0 0 0 0%)';
                 }
-
-                if (!this.video.paused && !this.video.ended) {
-                    requestAnimationFrame(loop);
-                }
+                if (!this.video.paused && !this.video.ended) requestAnimationFrame(loop);
             };
             requestAnimationFrame(loop);
         }
