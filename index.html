@@ -3,35 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>地鐵隱藏留言板</title>
+    <title>地鐵透視留言板</title>
     <style>
-        :root {
-            --metro-green: #2d5a3f;
-        }
-
         body {
             margin: 0;
-            background: #1a1a1a;
-            font-family: "Microsoft JhengHei", sans-serif;
+            background: #000;
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             height: 100vh;
-            color: white;
+            overflow: hidden;
         }
 
-        .container {
+        .phone-mockup {
             position: relative;
             width: 100%;
-            max-width: 500px;
-            aspect-ratio: 9 / 16;
-            background: #000;
+            max-width: 400px;
+            aspect-ratio: 9 / 19.5;
+            background: #111;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
         }
 
-        /* 影片層 */
-        video#bg-video {
+        video#train-video {
             position: absolute;
             width: 100%;
             height: 100%;
@@ -39,150 +35,135 @@
             z-index: 1;
         }
 
-        /* 留言板層 (SVG) */
-        .overlay-svg {
+        /* 文字容器：處理梯形透視 */
+        .perspective-container {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 28%; /* 根據截圖中綠板的高度位置調整 */
+            right: 10%;
+            width: 60%;
+            height: 20%;
             z-index: 2;
-            pointer-events: none; /* 讓點擊穿透到影片 */
+            /* 建立透視點 */
+            perspective: 600px;
+            pointer-events: none;
         }
 
-        /* 文字樣式 */
-        .curved-text {
-            font-size: 24px;
-            fill: rgba(255, 255, 255, 0.9);
+        /* 實際文字內容：套用旋轉達成梯形變形 */
+        .perspective-content {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            color: white;
+            font-size: 2.2rem;
             font-weight: bold;
-            letter-spacing: 2px;
-            filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));
-            opacity: 0;
-            transition: opacity 0.3s;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            
+            /* 核心：Y軸旋轉產生近大遠小的梯形效果 */
+            transform: rotateY(-25deg) rotateX(2deg);
+            transform-style: preserve-3d;
+            
+            /* 初始狀態：寬度為0，用來模擬被火車遮住的感覺 */
+            overflow: hidden;
+            width: 0%;
+            white-space: nowrap;
+            border-right: 0px solid transparent; /* 隱形邊界 */
         }
 
         /* 輸入區域 */
-        .controls {
-            padding: 20px;
-            width: 100%;
-            max-width: 500px;
-            box-sizing: border-box;
-            background: #222;
+        .input-panel {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 85%;
             z-index: 10;
+            display: flex;
+            background: rgba(0,0,0,0.6);
+            padding: 8px;
+            border-radius: 25px;
+            backdrop-filter: blur(5px);
         }
 
-        textarea {
-            width: 100%;
-            height: 60px;
-            background: #333;
-            border: 1px solid #444;
+        input {
+            flex: 1;
+            padding: 10px 15px;
+            border-radius: 20px;
+            border: none;
+            background: transparent;
             color: white;
-            padding: 10px;
-            border-radius: 8px;
-            resize: none;
-            margin-bottom: 10px;
+            outline: none;
         }
 
         button {
-            width: 100%;
-            padding: 12px;
-            background: #4CAF50;
+            padding: 8px 20px;
+            border-radius: 20px;
             border: none;
+            background: #4CAF50;
             color: white;
-            border-radius: 8px;
             cursor: pointer;
             font-weight: bold;
-        }
-
-        button:active {
-            transform: scale(0.98);
-        }
-
-        .hint {
-            font-size: 12px;
-            color: #888;
-            margin-top: 5px;
-            text-align: center;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <video id="bg-video" playsinline>
+    <div class="phone-mockup">
+        <video id="train-video" playsinline>
             <source src="Train.mov" type="video/quicktime">
             <source src="Train.mov" type="video/mp4">
-            您的瀏覽器不支援影片播放。
         </video>
 
-        <svg class="overlay-svg" viewBox="0 0 400 711">
-            <defs>
-                <path id="curvePath" d="M 50,350 Q 200,340 350,350" fill="transparent" />
-            </defs>
-            <text class="curved-text" id="targetText">
-                <textPath href="#curvePath" startOffset="50%" text-anchor="middle">
-                    </textPath>
-            </text>
-        </svg>
-    </div>
+        <div class="perspective-container">
+            <div id="reveal-text" class="perspective-content">
+                </div>
+        </div>
 
-    <div class="controls">
-        <textarea id="userInput" placeholder="輸入留言後點擊送出，觀察列車駛離..."></textarea>
-        <button onclick="handleAction()">送出並播放</button>
-        <div class="hint">列車駛離至 3.51s 時文字開始出現</div>
+        <div class="input-panel">
+            <input type="text" id="userMsg" placeholder="輸入留言..." value="白六愛媽媽">
+            <button onclick="revealMessage()">播放</button>
+        </div>
     </div>
 
     <script>
-        const video = document.getElementById('bg-video');
-        const textPath = document.querySelector('#targetText textPath');
-        const textElement = document.getElementById('targetText');
-        const input = document.getElementById('userInput');
+        const video = document.getElementById('train-video');
+        const revealDiv = document.getElementById('reveal-text');
+        const input = document.getElementById('userMsg');
 
-        function handleAction() {
-            const msg = input.value.trim();
-            if (!msg) {
-                alert("請輸入內容");
-                return;
-            }
-
-            // 重設狀態
+        function revealMessage() {
+            const msg = input.value || "白六愛媽媽";
+            
+            // 1. 初始化狀態
+            revealDiv.innerText = msg;
+            revealDiv.style.width = "0%"; // 先藏起來
+            revealDiv.style.transition = "none";
             video.currentTime = 0;
-            textPath.textContent = "";
-            textElement.style.opacity = 0;
-
-            // 播放影片
             video.play();
 
-            // 監聽影片時間
-            const checkTime = setInterval(() => {
-                // 當影片到達 3.51 秒（列車開始露出綠板）
-                if (video.currentTime >= 3.51) {
-                    textElement.style.opacity = 1;
-                    typeWriter(msg);
-                    clearInterval(checkTime);
-                }
-            }, 100);
-        }
+            // 2. 監控火車駛離 (3.51秒開始)
+            // 我們讓 width 隨著時間增加，模擬「遮蔽物移開」
+            const startTime = 3.51;
+            const duration = 1.49; // 假設 5 秒時完全移開 (5 - 3.51)
 
-        // 打字機效果 (漸序出現)
-        function typeWriter(text) {
-            let i = 0;
-            textPath.textContent = "";
-            
-            function type() {
-                if (i < text.length) {
-                    textPath.textContent += text.charAt(i);
-                    i++;
-                    setTimeout(type, 100); // 調整打字速度
+            const updateReveal = () => {
+                if (video.currentTime >= startTime) {
+                    // 計算露出百分比 (0% 到 100%)
+                    let progress = (video.currentTime - startTime) / duration;
+                    if (progress > 1) progress = 1;
+                    
+                    revealDiv.style.width = (progress * 100) + "%";
                 }
-            }
-            type();
-        }
+                
+                if (video.currentTime < 5) {
+                    requestAnimationFrame(updateReveal);
+                } else {
+                    revealDiv.style.width = "100%";
+                }
+            };
 
-        // 影片結束自動重設（可選）
-        video.onended = () => {
-            console.log("影片播放結束");
-        };
+            requestAnimationFrame(updateReveal);
+        }
     </script>
 </body>
 </html>
