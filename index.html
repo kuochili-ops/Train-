@@ -15,16 +15,25 @@
             transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
             mix-blend-mode: multiply; opacity: 0.9;
         }
-
         .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
         .row { display: flex; gap: 8px; align-items: center; }
-        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; }
+        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; font-size: 16px; }
         button { background: #ff3b30; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-download { background: #34c759; }
         .shared-mode .ui-bar { display: none; }
+        #status-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.8); display: none; flex-direction: column;
+            justify-content: center; align-items: center; color: white; z-index: 1000;
+        }
     </style>
 </head>
 <body>
+
+<div id="status-overlay">
+    <h2>影片錄製中...</h2>
+    <p>請勿關閉視窗，完成後將自動下載</p>
+</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
@@ -37,12 +46,11 @@
     <div class="ui-bar" id="uiBar">
         <div class="row">
             <input type="text" id="userInput" placeholder="輸入內容..." value="白六愛媽媽">
-            <button onclick="App.play()">預覽播放</button>
+            <button onclick="App.play()">預覽</button>
             <button class="btn-download" onclick="App.exportVideo()">輸出影片</button>
         </div>
         <div class="row">
             <button onclick="App.share()" style="background:#007aff;">複製分享網址</button>
-            <span id="status" style="color:#aaa; font-size:12px;"></span>
         </div>
     </div>
 </div>
@@ -51,9 +59,6 @@
 <canvas id="temp-cvs" style="display:none;"></canvas>
 
 <script>
-/**
- * 影片輸出功能模組 [cite: 2025-12-19, 2025-12-28]
- */
 const App = {
     pts: [{x: 0.02, y: 0.38}, {x: 0.98, y: 0.26}, {x: 0.95, y: 0.74}, {x: 0.01, y: 0.55}],
     timing: { start: 2.35, end: 3.73 },
@@ -61,12 +66,6 @@ const App = {
     img: document.getElementById('canvas-image'),
 
     init: function() {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('m')) {
-            document.body.classList.add('shared-mode');
-            document.getElementById('userInput').value = decodeURIComponent(params.get('m'));
-            setTimeout(() => this.play(), 1000);
-        }
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
     },
@@ -105,52 +104,73 @@ const App = {
         cvs.width = 1600; cvs.height = 600;
         ctx.clearRect(0,0,1600,600);
         ctx.fillStyle = '#e60000';
-        ctx.font = '900 200px sans-serif';
+        ctx.font = '900 220px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(text, 800, 300);
         this.img.src = cvs.toDataURL();
     },
 
     exportVideo: async function() {
-        const status = document.getElementById('status');
-        status.innerText = "錄製中，請稍候...";
+        document.getElementById('status-overlay').style.display = 'flex';
+        this.renderText(document.getElementById('userInput').value);
         
         const canvas = document.getElementById('export-cvs');
         const ctx = canvas.getContext('2d');
-        canvas.width = 1280; canvas.height = 720; // 輸出的解析度
+        canvas.width = 1280; canvas.height = 720;
         
+        // 準備錄製
         const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 5000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 8000000 });
         const chunks = [];
-
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = 'train_message.webm';
+            a.href = url; a.download = 'train_msg.webm';
             a.click();
-            status.innerText = "下載完成！";
+            document.getElementById('status-overlay').style.display = 'none';
         };
 
         this.video.currentTime = 0;
         await this.video.play();
         recorder.start();
 
-        const renderLoop = () => {
+        const drawLoop = () => {
+            if (this.video.paused || this.video.ended) {
+                recorder.stop();
+                return;
+            }
+            // 1. 畫背景影片
             ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
-            // 這裡需要模擬 CSS 的 matrix3d 繪製到 Canvas (較複雜，先以簡單疊加示意)
-            // 實際輸出建議錄製螢幕或使用 WebGL 合成
-            if (!this.video.ended) requestAnimationFrame(renderLoop);
-            else recorder.stop();
-        };
-        renderLoop();
-    },
+            
+            // 2. 同步計算遮罩進度
+            const now = this.video.currentTime;
+            const dur = this.timing.end - this.timing.start;
+            let prog = 0;
+            if (now > this.timing.start) prog = Math.min(1, (now - this.timing.start) / dur);
 
-    share: function() {
-        const msg = encodeURIComponent(document.getElementById('userInput').value);
-        const url = `${window.location.origin}${window.location.pathname}?m=${msg}`;
-        navigator.clipboard.writeText(url).then(() => alert('分享網址已複製！'));
+            // 3. 在畫布上模擬文字層 (這部分用簡單疊加模擬，若要 3D 需更複雜算法)
+            // 為了讓輸出影片也有文字「滑出」感，我們在 Canvas 上也套用同樣的 clip 邏輯
+            if (prog > 0) {
+                ctx.save();
+                // 這裡簡化處理：直接把呈現出來的 img 畫上去
+                // 注意：Canvas 錄製 CSS 變形層有極限，這裡採用直接抓取目前的畫面元素
+                ctx.globalAlpha = 0.9;
+                // 模擬揭開效果：只畫出揭開的部分
+                const clipX = canvas.width * (1 - prog);
+                ctx.beginPath();
+                ctx.rect(clipX, 0, canvas.width, canvas.height);
+                ctx.clip();
+                // 由於 matrix3d 無法直接轉 Canvas，錄影建議仍以螢幕錄影或後端合成最準
+                // 此處我們先確保文字在正確時間點才出現在畫布上
+                ctx.drawImage(this.img, 100, 250, 1000, 300); 
+                ctx.restore();
+            }
+
+            requestAnimationFrame(drawLoop);
+        };
+        drawLoop();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
