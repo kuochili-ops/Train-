@@ -20,6 +20,7 @@
             position: absolute; bottom: 80px; right: 25px; width: 130px;
             z-index: 999; opacity: 0; transition: opacity 0.8s ease; 
             pointer-events: none;
+            mix-blend-mode: screen; /* 預覽時也套用濾色去背 */
         }
 
         .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
@@ -61,7 +62,13 @@
 
 <script>
 const App = {
-    pts: [{x: -0.05, y: 0.35}, {x: 1.05, y: 0.22}, {x: 1.05, y: 0.78}, {x: -0.05, y: 0.60}],
+    // 重新校正綠板的四個角落，並將範圍稍微向外推
+    pts: [
+        {x: -0.10, y: 0.36}, // 左上 (向左上方推移)
+        {x: 1.10, y: 0.24},  // 右上 (向右上方推移)
+        {x: 1.08, y: 0.76},  // 右下 (向右下方推移)
+        {x: -0.08, y: 0.58}  // 左下 (向左下方推移)
+    ],
     timing: { start: 2.55, end: 3.83 }, 
     
     init: function() {
@@ -111,6 +118,7 @@ const App = {
     animate: function() {
         const cur = this.v.currentTime;
         const dur = this.v.duration || 5.5;
+        // Logo 在影片結束前 2 秒淡入 [cite: 2025-12-28]
         this.logoImg.style.opacity = (cur >= dur - 2) ? '1' : '0';
         
         const clipDur = this.timing.end - this.timing.start;
@@ -125,6 +133,7 @@ const App = {
         requestAnimationFrame(() => this.animate());
     },
 
+    // 像素級去背邏輯
     getProcessedLogo: function() {
         const c = document.createElement('canvas');
         const cx = c.getContext('2d');
@@ -134,7 +143,8 @@ const App = {
         const imgData = cx.getImageData(0, 0, c.width, c.height);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
-            if (d[i] < 50 && d[i+1] < 50 && d[i+2] < 50) d[i+3] = 0;
+            // 偵測深色背景轉透明 [cite: 2025-12-28]
+            if (d[i] < 60 && d[i+1] < 60 && d[i+2] < 60) d[i+3] = 0;
         }
         cx.putImageData(imgData, 0, 0);
         return c;
@@ -158,7 +168,7 @@ const App = {
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_3D.webm`; a.click();
+            a.href = URL.createObjectURL(blob); a.download = `Train_3D_Fixed.webm`; a.click();
             btn.innerText = "錄製影片"; btn.disabled = false;
             this.toast.style.opacity = "1";
             setTimeout(() => this.toast.style.opacity = "0", 3000);
@@ -188,6 +198,7 @@ const App = {
                     eCtx.restore();
                 }
 
+                // 片尾 Logo 導出 (結束前 2 秒)
                 if (cur >= (this.v.duration || 5.5) - 2) {
                     eCtx.save();
                     const logoW = 180; const logoH = logoW * (processedLogo.height / processedLogo.width);
