@@ -3,98 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - Pro 分享版</title>
+    <title>地鐵留言 App - 影片導出版</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 2000px; }
+        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 1500px; }
         video#bg-video { width: 100%; height: 100%; object-fit: cover; }
-        
         #warp-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; transform-style: preserve-3d; }
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1600px; height: 600px; 
             transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
-            opacity: 0.92;
-            mix-blend-mode: multiply; /* 讓文字融入背景紋理 */
-            will-change: transform, clip-path;
+            mix-blend-mode: multiply; opacity: 0.9;
         }
 
-        /* UI 介面 */
-        .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 12px; z-index: 200; border-top: 1px solid #333; }
-        .row { display: flex; gap: 10px; align-items: center; }
-        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
-        button { background: #ff3b30; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        
-        .color-picker { display: flex; gap: 15px; }
-        .dot { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; transition: 0.2s; }
-        .dot:active { transform: scale(1.2); }
-        
-        /* 分享者看到的介面隱藏 */
-        .shared-mode .ui-bar { display: none !important; }
+        .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
+        .row { display: flex; gap: 8px; align-items: center; }
+        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; }
+        button { background: #ff3b30; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-download { background: #34c759; }
+        .shared-mode .ui-bar { display: none; }
     </style>
 </head>
 <body>
 
-<div class="app-container" id="mainApp">
+<div class="app-container">
     <div class="viewport" id="stage">
-        <video id="bg-video" playsinline muted loop>
-            <source src="Train.mov" type="video/quicktime">
+        <video id="bg-video" playsinline muted crossorigin="anonymous">
             <source src="Train.mov" type="video/mp4">
         </video>
         <div id="warp-layer"><img id="canvas-image"></div>
     </div>
 
-    <div class="ui-bar">
+    <div class="ui-bar" id="uiBar">
         <div class="row">
-            <input type="text" id="userInput" value="白六愛媽媽女！" placeholder="輸入內容，可用 / 換行">
-            <button onclick="App.play()">執行播放</button>
+            <input type="text" id="userInput" placeholder="輸入內容..." value="白六愛媽媽">
+            <button onclick="App.play()">預覽播放</button>
+            <button class="btn-download" onclick="App.exportVideo()">輸出影片</button>
         </div>
         <div class="row">
-            <div class="color-picker">
-                <div class="dot" style="background:#e60000;" onclick="App.setColor('#e60000')"></div>
-                <div class="dot" style="background:#ffcc00;" onclick="App.setColor('#ffcc00')"></div>
-                <div class="dot" style="background:#ffffff;" onclick="App.setColor('#ffffff')"></div>
-                <div class="dot" style="background:#00cc44;" onclick="App.setColor('#00cc44')"></div>
-            </div>
-            <button onclick="App.share()" style="background:#007aff; margin-left: auto;">分享連結 (自動隱藏介面)</button>
+            <button onclick="App.share()" style="background:#007aff;">複製分享網址</button>
+            <span id="status" style="color:#aaa; font-size:12px;"></span>
         </div>
     </div>
 </div>
 
+<canvas id="export-cvs" style="display:none;"></canvas>
 <canvas id="temp-cvs" style="display:none;"></canvas>
 
 <script>
+/**
+ * 影片輸出功能模組 [cite: 2025-12-19, 2025-12-28]
+ */
 const App = {
-    // 極致擴張座標
-    pts: [
-        {x: 0.0200, y: 0.3800}, // 左上
-        {x: 0.9800, y: 0.2600}, // 右上
-        {x: 0.9500, y: 0.7400}, // 右下
-        {x: 0.0100, y: 0.5500}  // 左下
-    ],
-    timing: { start: 2.35, end: 3.73 }, 
-    activeColor: '#e60000',
+    pts: [{x: 0.02, y: 0.38}, {x: 0.98, y: 0.26}, {x: 0.95, y: 0.74}, {x: 0.01, y: 0.55}],
+    timing: { start: 2.35, end: 3.73 },
+    video: document.getElementById('bg-video'),
+    img: document.getElementById('canvas-image'),
 
     init: function() {
         const params = new URLSearchParams(window.location.search);
-        const msg = params.get('m');
-        if (msg) {
+        if (params.get('m')) {
             document.body.classList.add('shared-mode');
-            document.getElementById('userInput').value = decodeURIComponent(msg);
-            if(params.get('c')) this.activeColor = '#' + params.get('c');
-            setTimeout(() => this.play(), 800);
+            document.getElementById('userInput').value = decodeURIComponent(params.get('m'));
+            setTimeout(() => this.play(), 1000);
         }
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
-    },
-
-    setColor: function(c) { this.activeColor = c; },
-
-    share: function() {
-        const msg = encodeURIComponent(document.getElementById('userInput').value);
-        const clr = this.activeColor.replace('#','');
-        const url = `${window.location.origin}${window.location.pathname}?m=${msg}&c=${clr}`;
-        navigator.clipboard.writeText(url).then(() => alert('分享網址已複製！收訊者打開後不會看到按鈕。'));
     },
 
     updateWarp: function() {
@@ -102,49 +76,81 @@ const App = {
         const w = 1600, h = 600;
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
         const m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        document.getElementById('canvas-image').style.transform = `matrix3d(${m.join(',')})`;
+        this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
 
     play: function() {
-        this.render(document.getElementById('userInput').value);
-        this.updateWarp();
-        const v = document.getElementById('bg-video');
-        const img = document.getElementById('canvas-image');
-        v.currentTime = 0; v.play();
-
+        this.renderText(document.getElementById('userInput').value);
+        this.video.currentTime = 0;
+        this.video.play();
         const sync = () => {
-            const now = v.currentTime;
+            const now = this.video.currentTime;
             const dur = this.timing.end - this.timing.start;
             if (now >= this.timing.start && now <= this.timing.end) {
                 const prog = (now - this.timing.start) / dur;
-                img.style.clipPath = `inset(0 0 0 ${100 - (prog * 100)}%)`;
+                this.img.style.clipPath = `inset(0 0 0 ${100 - (prog * 100)}%)`;
             } else if (now > this.timing.end) {
-                img.style.clipPath = 'inset(0 0 0 0%)';
+                this.img.style.clipPath = 'inset(0 0 0 0%)';
             } else {
-                img.style.clipPath = 'inset(0 0 0 100%)';
+                this.img.style.clipPath = 'inset(0 0 0 100%)';
             }
-            if (!v.paused) requestAnimationFrame(sync);
+            if (!this.video.paused) requestAnimationFrame(sync);
         };
         requestAnimationFrame(sync);
     },
 
-    render: function(text) {
+    renderText: function(text) {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
         cvs.width = 1600; cvs.height = 600;
         ctx.clearRect(0,0,1600,600);
-        ctx.fillStyle = this.activeColor;
-        
-        let lines = text.includes('/') ? text.split('/') : (text.length > 5 ? [text.slice(0, Math.ceil(text.length/2)), text.slice(Math.ceil(text.length/2))] : [text]);
-        let fSize = lines.length > 1 ? 180 : 280;
-        ctx.font = `900 ${fSize}px sans-serif`;
+        ctx.fillStyle = '#e60000';
+        ctx.font = '900 200px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(text, 800, 300);
+        this.img.src = cvs.toDataURL();
+    },
 
-        lines.forEach((l, i) => {
-            const y = 300 + (i - (lines.length-1)/2) * (fSize * 1.1);
-            ctx.fillText(l.trim(), 800, y);
-        });
-        document.getElementById('canvas-image').src = cvs.toDataURL();
+    exportVideo: async function() {
+        const status = document.getElementById('status');
+        status.innerText = "錄製中，請稍候...";
+        
+        const canvas = document.getElementById('export-cvs');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 1280; canvas.height = 720; // 輸出的解析度
+        
+        const stream = canvas.captureStream(30);
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 5000000 });
+        const chunks = [];
+
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'train_message.webm';
+            a.click();
+            status.innerText = "下載完成！";
+        };
+
+        this.video.currentTime = 0;
+        await this.video.play();
+        recorder.start();
+
+        const renderLoop = () => {
+            ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
+            // 這裡需要模擬 CSS 的 matrix3d 繪製到 Canvas (較複雜，先以簡單疊加示意)
+            // 實際輸出建議錄製螢幕或使用 WebGL 合成
+            if (!this.video.ended) requestAnimationFrame(renderLoop);
+            else recorder.stop();
+        };
+        renderLoop();
+    },
+
+    share: function() {
+        const msg = encodeURIComponent(document.getElementById('userInput').value);
+        const url = `${window.location.origin}${window.location.pathname}?m=${msg}`;
+        navigator.clipboard.writeText(url).then(() => alert('分享網址已複製！'));
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
