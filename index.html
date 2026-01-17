@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 最終版</title>
+    <title>地鐵留言 App - 最終正式版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -16,38 +16,42 @@
             mix-blend-mode: multiply; opacity: 0.92;
         }
 
-        /* 片尾 Logo 容器 */
+        /* 片尾 Logo 圖片 */
         #kuo-end-img {
-            position: absolute; bottom: 50px; right: 20px; width: 120px;
+            position: absolute; bottom: 80px; right: 25px; width: 110px;
             z-index: 999; opacity: 0; transition: opacity 0.5s; pointer-events: none;
         }
 
         .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
         .row { display: flex; gap: 8px; }
         input { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
-        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #444; color: white; }
         .rec-btn { background: #FF3B30; color: #fff; }
-        .rec-btn:disabled { background: #666; opacity: 0.7; }
+        .rec-btn:disabled { background: #555; opacity: 0.6; }
 
-        /* 下載完成提示 */
-        #toast { 
+        /* 完成提示框 (Toast) */
+        #status-toast { 
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: #34c759; color: white; padding: 12px 24px; border-radius: 50px;
-            font-weight: bold; z-index: 2000; opacity: 0; transition: 0.3s;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); pointer-events: none;
+            background: #4cd964; color: white; padding: 10px 25px; border-radius: 12px;
+            font-weight: bold; z-index: 2000; opacity: 0; transition: 0.4s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: none;
+            display: flex; align-items: center; gap: 8px;
         }
     </style>
 </head>
 <body>
 
-<div id="toast">✅ 錄製完成，檔案已下載！</div>
+<div id="status-toast">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="white"><path d="M0 11l2-2 5 5L18 3l2 2L7 18z"/></svg>
+    錦起完成，開扉已下載！
+</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <div id="warp-layer"><img id="canvas-image"></div>
-        <img id="kuo-end-img" src="kuo_logo.png" alt="Logo">
+        <img id="kuo-end-img" src="IMG_6604.png" alt="End Logo">
     </div>
 
     <div class="ui-bar">
@@ -71,6 +75,7 @@ const App = {
         this.img = document.getElementById('canvas-image');
         this.logoImg = document.getElementById('kuo-end-img');
         this.input = document.getElementById('userInput');
+        this.toast = document.getElementById('status-toast');
         
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
@@ -128,12 +133,6 @@ const App = {
         requestAnimationFrame(() => this.animate());
     },
 
-    showToast: function() {
-        const toast = document.getElementById('toast');
-        toast.style.opacity = '1';
-        setTimeout(() => toast.style.opacity = '0', 3000);
-    },
-
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
         btn.innerText = "錄製中..."; btn.disabled = true;
@@ -144,16 +143,19 @@ const App = {
         const eCtx = exportCanvas.getContext('2d');
         
         const stream = exportCanvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 12000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 15000000 });
         const chunks = [];
 
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_3D.webm`; a.click();
+            a.href = URL.createObjectURL(blob); a.download = `Train_3D_Export.webm`; a.click();
             btn.innerText = "錄製影片"; btn.disabled = false;
-            this.showToast(); // 顯示完成提示 [cite: 2025-12-28]
+            
+            // 顯示下載完成提示
+            this.toast.style.opacity = "1";
+            setTimeout(() => this.toast.style.opacity = "0", 3000);
         };
 
         this.v.currentTime = 0;
@@ -181,13 +183,13 @@ const App = {
                     eCtx.restore();
                 }
 
-                // 在錄影畫布畫入 Logo 圖片 [cite: 2025-12-28]
                 if (cur >= this.timing.showEnd) {
                     eCtx.save();
                     eCtx.setTransform(1, 0, 0, 1, 0, 0);
-                    // 計算 Logo 在錄影畫布的位置 (右下角)
-                    const lw = 180, lh = 90;
-                    eCtx.drawImage(this.logoImg, exportCanvas.width - lw - 30, exportCanvas.height - lh - 80, lw, lh);
+                    // 根據 720x1280 解析度微調 Logo 位置與大小
+                    const logoW = 180; 
+                    const logoH = logoW * (this.logoImg.naturalHeight / this.logoImg.naturalWidth);
+                    eCtx.drawImage(this.logoImg, exportCanvas.width - logoW - 40, exportCanvas.height - logoH - 120, logoW, logoH);
                     eCtx.restore();
                 }
                 
