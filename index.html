@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 物理透視增強版</title>
+    <title>地鐵留言 App - 最終同步完成版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         
         .viewport { 
             position: relative; flex: 1; background: #111; overflow: hidden; 
-            perspective: 2000px; /* 強化場景深度感 */
+            perspective: 1200px; /* 增加場景透視深度 */
         }
         
         video#bg-video { width: 100%; height: 100%; object-fit: cover; }
 
-        /* 文字容器：確保 3D 渲染開啟 */
         #warp-layer { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             z-index: 10; pointer-events: none; 
@@ -24,12 +23,11 @@
 
         #canvas-image { 
             position: absolute; top: 0; left: 0; 
-            width: 800px; height: 300px; /* 畫布原始尺寸 */
+            width: 800px; height: 300px; 
             transform-origin: 0 0; 
             clip-path: inset(0 0 0 100%); 
-            filter: drop-shadow(2px 2px 10px rgba(0,0,0,0.6));
-            opacity: 0.95;
-            backface-visibility: hidden;
+            filter: drop-shadow(2px 2px 10px rgba(0,0,0,0.5));
+            opacity: 0.98;
             will-change: transform, clip-path;
         }
 
@@ -58,60 +56,49 @@
 <canvas id="temp-cvs" style="display:none;"></canvas>
 
 <script>
-/**
- * 修正透視與速度 [cite: 2025-12-19, 2025-12-28]
- */
 const App = {
-    fixedPoints: [
+    // 您回報的座標
+    pts: [
         {x: 0.0720, y: 0.3928}, // 左上
         {x: 0.9413, y: 0.2886}, // 右上
         {x: 0.9200, y: 0.6994}, // 右下
         {x: 0.0613, y: 0.5291}  // 左下
     ],
-    timing: {
-        start: 1.92,
-        end: 3.45, // 稍微延長結束時間，避免感覺太快
-        get duration() { return this.end - this.start; }
-    },
+    // 確定的時間參數
+    timing: { start: 1.92, end: 3.11 },
+    
     video: document.getElementById('bg-video'),
     img: document.getElementById('canvas-image'),
     
     init: function() {
-        window.addEventListener('resize', () => this.updatePerspective());
-        this.updatePerspective();
+        window.addEventListener('resize', () => this.updateWarp());
+        this.updateWarp();
     },
 
-    // 強化版矩陣運算，確保 3D 變形生效
-    updatePerspective: function() {
-        const stage = document.getElementById('stage').getBoundingClientRect();
+    updateWarp: function() {
+        const rect = document.getElementById('stage').getBoundingClientRect();
         const w = 800, h = 300;
-        const p = this.fixedPoints.map(pt => ({
-            x: pt.x * stage.width,
-            y: pt.y * stage.height
-        }));
+        const p = this.pts.map(pt => ({ x: pt.x * rect.width, y: pt.y * rect.height }));
 
-        const t = this.calcHomography(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        
-        // 強制套用 matrix3d，這會產生真正的 3D 傾斜感
-        this.img.style.transform = `matrix3d(${t[0]},${t[3]},0,${t[6]},${t[1]},${t[4]},0,${t[7]},0,0,1,0,${t[2]},${t[5]},0,${t[8]})`;
+        // 計算更精確的透視矩陣
+        const matrix = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        this.img.style.transform = `matrix3d(${matrix.join(',')})`;
     },
 
     play: function() {
-        this.renderText(document.getElementById('userInput').value);
-        this.updatePerspective();
+        this.render(document.getElementById('userInput').value);
+        this.updateWarp();
         
         this.video.currentTime = 0;
         this.video.play();
 
-        const syncLoop = () => {
+        const sync = () => {
             const now = this.video.currentTime;
+            const duration = this.timing.end - this.timing.start;
             
             if (now >= this.timing.start && now <= this.timing.end) {
-                let progress = (now - this.timing.start) / this.timing.duration;
-                
-                // 速度優化：讓揭曉帶有一點減速感，看起來更自然
-                // progress = Math.sin(progress * Math.PI / 2); 
-                
+                const progress = (now - this.timing.start) / duration;
+                // 揭曉進度同步
                 this.img.style.clipPath = `inset(0 0 0 ${100 - (progress * 100)}%)`;
             } else if (now > this.timing.end) {
                 this.img.style.clipPath = 'inset(0 0 0 0%)';
@@ -119,48 +106,53 @@ const App = {
                 this.img.style.clipPath = 'inset(0 0 0 100%)';
             }
 
-            if (!this.video.paused && !this.video.ended) {
-                requestAnimationFrame(syncLoop);
-            }
+            if (!this.video.paused && !this.video.ended) requestAnimationFrame(sync);
         };
-        requestAnimationFrame(syncLoop);
+        requestAnimationFrame(sync);
     },
 
-    renderText: function(text) {
+    render: function(text) {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
         cvs.width = 800; cvs.height = 300;
         ctx.clearRect(0, 0, 800, 300);
         ctx.fillStyle = '#ff0000';
-        // 增加字體垂直拉伸感，符合透視視覺
-        ctx.font = '900 200px sans-serif';
+        ctx.font = '900 160px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(text, 400, 150);
         this.img.src = cvs.toDataURL();
     },
 
-    // 核心單應性矩陣運算 (Homography Matrix)
-    calcHomography: function(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4) {
-        const adj = (m) => [
-            m[4]*m[8]-m[5]*m[7], m[2]*m[7]-m[1]*m[8], m[1]*m[4]-m[2]*m[5],
-            m[5]*m[6]-m[3]*m[8], m[0]*m[8]-m[2]*m[6], m[2]*m[3]-m[0]*m[5],
-            m[3]*m[7]-m[4]*m[6], m[1]*m[6]-m[0]*m[7], m[0]*m[4]-m[1]*m[3]
+    calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
+        // 使用更嚴謹的單應性矩陣解法
+        const a = [
+            [x1, y1, 1, 0, 0, 0, -px1*x1, -px1*y1], [0, 0, 0, x1, y1, 1, -py1*x1, -py1*y1],
+            [x2, y2, 1, 0, 0, 0, -px2*x2, -px2*y2], [0, 0, 0, x2, y2, 1, -py2*x2, -py2*y2],
+            [x3, y3, 1, 0, 0, 0, -px3*x3, -px3*y3], [0, 0, 0, x3, y3, 1, -py3*x3, -py3*y3],
+            [x4, y4, 1, 0, 0, 0, -px4*x4, -px4*y4], [0, 0, 0, x4, y4, 1, -py4*x4, -py4*y4]
         ];
-        const mult = (a, b) => {
-            const c = Array(9);
-            for(let i=0; i<3; i++) for(let j=0; j<3; j++) {
-                let s=0; for(let k=0; k<3; k++) s+=a[i*3+k]*b[k*3+j]; c[i*3+j]=s;
+        const b = [px1, py1, px2, py2, px3, py3, px4, py4];
+        
+        // 高斯消去法解線性方程組
+        const n = 8;
+        for (let i=0; i<n; i++) {
+            let max = i;
+            for (let j=i+1; j<n; j++) if (Math.abs(a[j][i]) > Math.abs(a[max][i])) max = j;
+            [a[i], a[max]] = [a[max], a[i]];
+            [b[i], b[max]] = [b[max], b[i]];
+            for (let j=i+1; j<n; j++) {
+                const f = a[j][i] / a[i][i];
+                b[j] -= f * b[i];
+                for (let k=i; k<n; k++) a[j][k] -= f * a[i][k];
             }
-            return c;
-        };
-        const b2p = (x1, y1, x2, y2, x3, y3, x4, y4) => {
-            const m = [x1, x2, x3, y1, y2, y3, 1, 1, 1];
-            const v = mult(adj(m), [x4, y4, 1]);
-            return mult(m, [v[0], 0, 0, 0, v[1], 0, 0, 0, v[2]]);
-        };
-        const t = mult(b2p(px1, py1, px2, py2, px3, py3, px4, py4), adj(b2p(x1, y1, x2, y2, x3, y3, x4, y4)));
-        for(let i=0; i<9; i++) t[i] /= t[8];
-        return t;
+        }
+        const x = new Array(8);
+        for (let i=n-1; i>=0; i--) {
+            let s = 0;
+            for (let j=i+1; j<n; j++) s += a[i][j] * x[j];
+            x[i] = (b[i] - s) / a[i][i];
+        }
+        return [x[0], x[3], 0, x[6], x[1], x[4], 0, x[7], 0, 0, 1, 0, x[2], x[5], 0, 1];
     }
 };
 
