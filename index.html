@@ -2,18 +2,16 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>白六留言板 - 物理擬真版</title>
+    <title>白六留言板 - 物理貼合修正版</title>
     <style>
         body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
         
-        .phone-mockup {
+        .phone-container {
             position: relative;
             width: 100%;
             max-width: 400px;
             aspect-ratio: 9 / 19.5;
             background: #111;
-            overflow: hidden;
         }
 
         video#train-video {
@@ -24,124 +22,109 @@
             z-index: 1;
         }
 
-        /* 牆面透視層：文字座標必須在此層完全固定 */
-        .wall-perspective {
+        /* 牆面透視層：這是文字「貼」住的地方，座標絕對固定 */
+        .wall-surface {
             position: absolute;
-            top: 22%; /* 根據影片中綠板的位置 */
-            left: 0;
-            width: 100%;
+            top: 24%; /* 調整至綠板中心高度 */
+            left: 5%;
+            width: 90%;
             height: 40%;
             z-index: 2;
-            perspective: 1200px; /* 增加透視深度 */
-            pointer-events: none;
-        }
-
-        /* 模擬牆面的梯形面板 */
-        .trapezoid-panel {
-            width: 100%;
-            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
             
-            /* 關鍵參數：調整 rotateY 與 skewY 讓文字底邊與導盲磚平行 */
-            transform: rotateY(-45deg) skewY(-6deg) translateX(30px);
+            /* 強透視調整：讓文字右側大、左側小，並與綠板邊緣平行 */
+            transform: perspective(1000px) rotateY(-48deg) skewY(-7deg);
             transform-origin: right center;
+            pointer-events: none;
 
-            /* 遮罩邏輯：使用 inset。初始時遮住右側 100% 的區域 */
-            /* 隨火車向左開，我們縮減右側遮擋比例 */
-            clip-path: inset(0 0 0 100%); 
+            /* 核心：物理遮罩。inset(上 右 下 左) */
+            /* 初始狀態：左邊界為 100%，表示完全遮住文字 */
+            clip-path: inset(0 0 0 100%);
         }
 
-        .wall-text {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 2.8rem;
+        .static-text {
+            color: #ff0000; /* 配合您最新截圖的紅色 */
+            font-size: 5rem; /* 放大文字以填滿綠板 */
             font-weight: 900;
             white-space: nowrap;
-            /* 加上輕微模糊模擬環境質感 */
-            filter: blur(0.4px) drop-shadow(2px 2px 4px rgba(0,0,0,0.4));
+            /* 模擬噴漆質感：輕微模糊與環境光混合 */
+            filter: blur(0.5px) drop-shadow(2px 2px 5px rgba(0,0,0,0.4));
+            font-family: "Microsoft JhengHei", sans-serif;
         }
 
-        /* UI */
+        /* 輸入介面 */
         .ui-panel {
             position: absolute;
-            bottom: 30px;
-            width: 85%;
-            left: 50%;
-            transform: translateX(-50%);
+            bottom: 20px;
+            width: 90%;
+            left: 5%;
             z-index: 10;
             display: flex;
-            background: rgba(0,0,0,0.5);
-            backdrop-filter: blur(10px);
-            padding: 8px;
-            border-radius: 30px;
+            gap: 10px;
         }
-
-        input { flex: 1; background: transparent; border: none; color: white; padding-left: 15px; outline: none; }
-        button { background: #4CAF50; border: none; color: white; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div class="phone-mockup">
+<div class="phone-container">
     <video id="train-video" playsinline>
         <source src="Train.mov" type="video/quicktime">
         <source src="Train.mov" type="video/mp4">
     </video>
 
-    <div class="wall-perspective">
-        <div id="mask-layer" class="trapezoid-panel">
-            <div id="display-text" class="wall-text">白六愛媽媽</div>
-        </div>
+    <div id="mask-gate" class="wall-surface">
+        <div id="target-text" class="static-text">白六愛媽媽</div>
     </div>
 
     <div class="ui-panel">
-        <input type="text" id="userInput" value="白六愛媽媽">
-        <button onclick="playEffect()">播放</button>
+        <input type="text" id="userInput" style="flex:1; border-radius:20px; padding:10px;" value="白六愛媽媽">
+        <button onclick="startReveal()" style="border-radius:20px; padding:10px 20px;">播放</button>
     </div>
 </div>
 
 <script>
     const video = document.getElementById('train-video');
-    const mask = document.getElementById('mask-layer');
-    const text = document.getElementById('display-text');
-    const input = document.getElementById('userInput');
+    const gate = document.getElementById('mask-gate');
+    const text = document.getElementById('target-text');
 
-    function playEffect() {
-        text.innerText = input.value;
+    function startReveal() {
+        text.innerText = document.getElementById('userInput').value;
         
-        // 重置：完全遮蔽
-        mask.style.transition = 'none';
-        mask.style.clipPath = 'inset(0 0 0 100%)';
+        // 重置狀態
+        gate.style.transition = 'none';
+        gate.style.clipPath = 'inset(0 0 0 100%)';
         
         video.currentTime = 0;
         video.play();
 
-        // 觀察影片：列車尾巴在 3.51 秒開始露出綠板，約在 4.8 秒完全駛離
-        const startReveal = 3.51;
-        const endReveal = 4.8;
+        // 根據您的錄影時間點微調：
+        // 3.51s 列車尾部開始露出綠色區域
+        // 4.90s 列車完全離開畫面
+        const start = 3.51;
+        const end = 4.9;
 
-        const syncReveal = () => {
-            const time = video.currentTime;
+        const update = () => {
+            const now = video.currentTime;
             
-            if (time >= startReveal && time <= endReveal) {
-                // 計算進度 0 -> 1
-                const progress = (time - startReveal) / (endReveal - startReveal);
-                // 遮罩右側百分比從 100% 降到 0%
-                const revealVal = 100 - (progress * 100);
-                mask.style.clipPath = `inset(0 0 0 ${revealVal}%)`;
-            } else if (time > endReveal) {
-                mask.style.clipPath = 'inset(0 0 0 0%)';
+            if (now >= start && now <= end) {
+                // 計算揭曉進度 (0 到 1)
+                const progress = (now - start) / (end - start);
+                // 遮罩的左邊界（第4個參數）從 100% 變為 0%
+                const revealLeft = 100 - (progress * 100);
+                gate.style.clipPath = `inset(0 0 0 ${revealLeft}%)`;
+            } else if (now > end) {
+                gate.style.clipPath = 'inset(0 0 0 0%)';
             }
 
             if (!video.paused && !video.ended) {
-                requestAnimationFrame(syncReveal);
+                requestAnimationFrame(update);
             }
         };
 
-        requestAnimationFrame(syncReveal);
+        requestAnimationFrame(update);
     }
 </script>
-
 </body>
 </html>
