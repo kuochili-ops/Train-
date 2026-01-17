@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - Pro 錄製版</title>
+    <title>地鐵留言 App - 精準透視版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; }
+        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 1500px; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
         
-        /* 預覽用的文字層 */
-        #drawingCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; mix-blend-mode: multiply; }
+        /* 預覽文字層：恢復 matrix3d 設定 */
+        #canvas-image { 
+            position: absolute; top: 0; left: 0; width: 1600px; height: 600px; 
+            transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
+            mix-blend-mode: multiply; opacity: 0.92;
+        }
 
-        /* NHK 風格結尾 */
         #kuo-end {
             position: absolute; bottom: 80px; right: 20px; z-index: 999;
             color: white; opacity: 0; transition: opacity 0.5s; pointer-events: none;
@@ -24,7 +27,7 @@
 
         .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; }
         .row { display: flex; gap: 8px; }
-        input { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; }
+        input { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
         button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .rec-btn { background: #FF3B30; color: #fff; }
     </style>
@@ -34,7 +37,7 @@
 <div class="app-container">
     <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
-        <canvas id="drawingCanvas"></canvas>
+        <div id="warp-layer"><img id="canvas-image"></div>
         
         <div id="kuo-end">
             <span class="nhk-final">終</span>
@@ -49,120 +52,99 @@
         <div class="row">
             <input type="text" id="userInput" value="新年快樂/2026">
             <button onclick="App.play()">預覽</button>
-            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製影片</button>
+            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製 3D 影片</button>
         </div>
     </div>
 </div>
 
+<canvas id="temp-cvs" style="display:none;"></canvas>
+
 <script>
 const App = {
-    // 座標點與時間設定 (時間已延後 0.1s)
     pts: [{x: 0.02, y: 0.38}, {x: 0.98, y: 0.26}, {x: 0.95, y: 0.74}, {x: 0.01, y: 0.55}],
     timing: { start: 2.45, end: 3.73, showEnd: 4.8 }, 
     
     init: function() {
         this.v = document.getElementById('v');
-        this.canvas = document.getElementById('drawingCanvas');
-        this.ctx = this.canvas.getContext('2d');
+        this.img = document.getElementById('canvas-image');
         this.input = document.getElementById('userInput');
         
-        window.addEventListener('resize', () => this.resize());
-        this.resize();
+        window.addEventListener('resize', () => this.updateWarp());
+        this.updateWarp();
         this.animate();
     },
 
-    resize: function() {
-        this.canvas.width = this.v.clientWidth;
-        this.canvas.height = this.v.clientHeight;
+    updateWarp: function() {
+        const r = document.getElementById('stage').getBoundingClientRect();
+        const w = 1600, h = 600;
+        const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
+        // 恢復之前的 matrix3d 運算邏輯
+        this.m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        this.img.style.transform = `matrix3d(${this.m.join(',')})`;
     },
 
     play: function() {
+        this.renderOffscreenText();
         this.v.currentTime = 0;
         this.v.play();
     },
 
-    // 核心渲染邏輯：支援自動分行與透視變換 [cite: 2025-12-28]
-    drawText: function(targetCtx, w, h, isExport = false) {
+    renderOffscreenText: function() {
+        const cvs = document.getElementById('temp-cvs');
+        const ctx = cvs.getContext('2d');
         const text = this.input.value;
-        const cur = this.v.currentTime;
+        cvs.width = 1600; cvs.height = 600;
+        ctx.clearRect(0,0,1600,600);
         
-        if (cur < this.timing.start) return;
-
-        // 1. 離屏排版文字
-        const temp = document.createElement('canvas');
-        temp.width = 1000; temp.height = 400;
-        const tCtx = temp.getContext('2d');
+        let lines = text.includes('/') ? text.split('/') : [text];
+        let fontSize = lines.length > 1 ? 160 : 240;
         
-        let lines = text.includes('/') ? text.split('/') : (text.length > 5 ? [text.slice(0, Math.ceil(text.length/2)), text.slice(Math.ceil(text.length/2))] : [text]);
-        let fontSize = lines.length > 1 ? 140 : 220;
-        
-        tCtx.fillStyle = "red";
-        tCtx.textAlign = "center";
-        tCtx.textBaseline = "middle";
-        tCtx.font = `900 ${fontSize}px sans-serif`;
+        ctx.fillStyle = '#e60000';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = `900 ${fontSize}px sans-serif`;
 
         lines.forEach((line, i) => {
-            const y = 200 + (i - (lines.length-1)/2) * (fontSize * 1.1);
-            tCtx.fillText(line, 500, y);
+            const y = 300 + (i - (lines.length-1)/2) * (fontSize * 1.1);
+            ctx.fillText(line, 800, y);
         });
-
-        // 2. 準備透視投影座標
-        const p = this.pts.map(pt => ({ x: pt.x * w, y: pt.y * h }));
-        
-        // 3. 計算揭開進度 (遮罩)
-        const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
-
-        targetCtx.save();
-        // 套用由右往左的遮罩
-        targetCtx.beginPath();
-        targetCtx.rect(w * (1 - prog), 0, w, h);
-        targetCtx.clip();
-
-        // 4. 繪製文字 (這裡使用範例中的縮放對位法，確保錄影跟預覽一致) [cite: 2025-12-28]
-        const cX = (p[0].x + p[1].x + p[2].x + p[3].x) / 4;
-        const cY = (p[0].y + p[1].y + p[2].y + p[3].y) / 4;
-        const angle = Math.atan2(p[1].y - p[0].y, p[1].x - p[0].x);
-        const bW = Math.sqrt(Math.pow(p[1].x - p[0].x, 2) + Math.pow(p[1].y - p[0].y, 2));
-
-        targetCtx.translate(cX, cY);
-        targetCtx.rotate(angle);
-        const scale = bW / 1000;
-        targetCtx.scale(scale, scale);
-        targetCtx.globalAlpha = 0.9;
-        targetCtx.drawImage(temp, -500, -200);
-        targetCtx.restore();
+        this.img.src = cvs.toDataURL();
     },
 
     animate: function() {
         const cur = this.v.currentTime;
         document.getElementById('kuo-end').style.opacity = (cur >= this.timing.showEnd) ? '1' : '0';
         
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.drawText(this.ctx, this.canvas.width, this.canvas.height);
-        
+        const dur = this.timing.end - this.timing.start;
+        if (cur >= this.timing.start && cur <= this.timing.end) {
+            const prog = (cur - this.timing.start) / dur;
+            this.img.style.clipPath = `inset(0 0 0 ${100 - (prog * 100)}%)`;
+        } else if (cur > this.timing.end) {
+            this.img.style.clipPath = 'inset(0 0 0 0%)';
+        } else {
+            this.img.style.clipPath = 'inset(0 0 0 100%)';
+        }
         requestAnimationFrame(() => this.animate());
     },
 
-    // 錄製功能：參考您提供的結構優化 [cite: 2025-12-19, 2025-12-28]
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
         btn.innerText = "錄製中..."; btn.disabled = true;
+        this.renderOffscreenText();
 
         const exportCanvas = document.createElement('canvas');
-        // 強制鎖定直式高畫質
         exportCanvas.width = 720; exportCanvas.height = 1280;
         const eCtx = exportCanvas.getContext('2d');
         
         const stream = exportCanvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 10000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 12000000 });
         const chunks = [];
 
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_Message.webm`; a.click();
-            btn.innerText = "錄製影片"; btn.disabled = false;
+            a.href = URL.createObjectURL(blob); a.download = `Train_3D_Fixed.webm`; a.click();
+            btn.innerText = "錄製 3D 影片"; btn.disabled = false;
         };
 
         this.v.currentTime = 0;
@@ -171,15 +153,34 @@ const App = {
 
         const renderLoop = () => {
             if (recorder.state === "recording") {
-                // 畫背景 (直式 cover)
+                // 1. 畫背景影片 (直式填充)
                 eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
-                // 畫文字 (同步 3D 效果)
-                this.drawText(eCtx, exportCanvas.width, exportCanvas.height, true);
                 
-                // 畫結尾浮水印
-                if (this.v.currentTime >= this.timing.showEnd) {
-                    this.drawWatermark(eCtx, exportCanvas.width, exportCanvas.height);
+                // 2. 畫 3D 透視文字
+                const cur = this.v.currentTime;
+                if (cur >= this.timing.start) {
+                    const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
+                    eCtx.save();
+                    
+                    // 同步遮罩
+                    eCtx.beginPath();
+                    eCtx.rect(exportCanvas.width * (1 - prog), 0, exportCanvas.width, exportCanvas.height);
+                    eCtx.clip();
+
+                    // 恢復 Matrix 投影到錄影畫布
+                    const r = document.getElementById('stage').getBoundingClientRect();
+                    const sX = exportCanvas.width / r.width;
+                    const sY = exportCanvas.height / r.height;
+                    const m = this.m;
+                    // 將 matrix3d 同步到錄影 Canvas 的變換矩陣 [cite: 2025-12-28]
+                    eCtx.setTransform(m[0]*sX, m[1]*sY, m[4]*sX, m[5]*sY, m[12]*sX, m[13]*sY);
+                    eCtx.globalAlpha = 0.9;
+                    eCtx.drawImage(document.getElementById('temp-cvs'), 0, 0);
+                    eCtx.restore();
                 }
+
+                // 3. 畫結尾浮水印
+                if (cur >= this.timing.showEnd) this.drawWatermark(eCtx, exportCanvas.width, exportCanvas.height);
                 
                 if (this.v.ended) recorder.stop();
                 else requestAnimationFrame(renderLoop);
@@ -190,13 +191,32 @@ const App = {
 
     drawWatermark: function(ctx, w, h) {
         ctx.save();
-        ctx.fillStyle = "white";
-        ctx.shadowBlur = 10; ctx.shadowColor = "black";
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // 重置矩陣
+        ctx.fillStyle = "white"; ctx.shadowBlur = 10; ctx.shadowColor = "black";
         ctx.font = "bold 48px serif"; ctx.fillText("終", w - 180, h - 100);
         ctx.font = "bold 13px sans-serif"; ctx.fillText("制作・著作", w - 120, h - 125);
         ctx.lineWidth = 2; ctx.strokeStyle = "white"; ctx.strokeRect(w - 120, h - 115, 80, 30);
         ctx.font = "bold 20px sans-serif"; ctx.fillText("ＫＵＯ", w - 110, h - 92);
         ctx.restore();
+    },
+
+    calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
+        const a = [[x1,y1,1,0,0,0,-px1*x1,-px1*y1],[0,0,0,x1,y1,1,-py1*x1,-py1*y1],[x2,y2,1,0,0,0,-px2*x2,-px2*y2],[0,0,0,x2,y2,1,-py2*x2,-py2*y2],[x3,y3,1,0,0,0,-px3*x3,-px3*y3],[0,0,0,x3,y3,1,-py3*x3,-py3*y3],[x4,y4,1,0,0,0,-px4*x4,-px4*y4],[0,0,0,x4,y4,1,-py4*x4,-py4*y4]];
+        const b = [px1,py1,px2,py2,px3,py3,px4,py4];
+        for(let i=0;i<8;i++){
+            let m=i; for(let j=i+1;j<8;j++) if(Math.abs(a[j][i])>Math.abs(a[m][i])) m=j;
+            [a[i],a[m]]=[a[m],a[i]]; [b[i],b[m]]=[b[m],b[i]];
+            for(let j=i+1;j<8;j++){
+                let f=a[j][i]/a[i][i]; b[j]-=f*b[i];
+                for(let k=i;k<8;k++) a[j][k]-=f*a[i][k];
+            }
+        }
+        const x=new Array(8);
+        for(let i=7;i>=0;i--){
+            let s=0; for(let j=i+1;j<8;j++) s+=a[i][j]*x[j];
+            x[i]=(b[i]-s)/a[i][i];
+        }
+        return [x[0],x[3],0,x[6],x[1],x[4],0,x[7],0,0,1,0,x[2],x[5],0,1];
     }
 };
 
