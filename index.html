@@ -3,159 +3,164 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵隱藏留言 App</title>
+    <title>地鐵隱藏留言 App - 滿版透視版</title>
     <style>
-        body {
-            margin: 0;
-            background: #1a1a1a;
-            font-family: "Microsoft JhengHei", sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100vh;
-            color: white;
-            overflow: hidden;
-        }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; font-family: "Microsoft JhengHei", sans-serif; overflow: hidden; }
+        .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
 
-        .container {
-            position: relative;
-            width: 100%;
-            max-width: 500px;
-            aspect-ratio: 9 / 16;
-            background: #000;
-            overflow: hidden;
-        }
+        /* 影片層 (底層) */
+        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; }
+        video#bg-video { width: 100%; height: 100%; object-fit: cover; }
 
-        video#bg-video {
+        /* 3D 透視舞台 (中層) */
+        .perspective-stage {
             position: absolute;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-        }
-
-        /* 物理貼合層：負責處理梯形透視 */
-        .perspective-layer {
-            position: absolute;
-            top: 28%; /* 調整至綠板高度 */
+            /* 根據你的合成圖調整位置和大小，讓它填滿綠板區域 */
+            top: 23%; 
             left: 0;
             width: 100%;
-            height: 30%;
-            z-index: 5;
-            perspective: 1000px; /* 建立 3D 深度 */
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            height: 42%; 
+            z-index: 10;
+            perspective: 1000px; /* 透視深度 */
             pointer-events: none;
         }
 
-        /* 梯形面板：這就是你說的「依照綠板外型做變形」 */
-        .trapezoid-board {
-            width: 90%;
-            display: flex;
-            justify-content: center;
-            /* 調整以下參數以對齊綠板邊緣 */
-            /* rotateY: 牆面深度, skewY: 平行修正 */
-            transform: rotateY(-45deg) skewY(-7deg) translateX(30px);
+        /* 滿版梯形面板 (核心) */
+        .full-trapezoid {
+            width: 100%;
+            height: 100%;
+            /* 關鍵透視參數：rotateY(深度), skewY(傾斜校正) */
+            /* 這些數值是為了對齊你的紅色大字合成圖 */
+            transform: rotateY(-50deg) skewY(-8deg) translateX(50px) scaleY(1.1);
             transform-origin: center right;
-            
-            /* 核心遮罩：一開始由左往右遮住 (100%) */
-            /* 隨著火車開走，這份 inset 會縮減，讓圖顯現出來 */
+            /* 初始遮罩：完全遮蔽 */
             clip-path: inset(0 0 0 100%); 
         }
 
-        .text-strip {
-            color: #ff0000; /* 紅色噴漆感 */
-            font-size: 3.5rem;
-            font-weight: 900;
-            white-space: nowrap;
-            letter-spacing: 2px;
-            /* 增加環境融合感 */
-            filter: blur(0.5px) drop-shadow(2px 2px 4px rgba(0,0,0,0.5));
-            opacity: 0.9;
-        }
-
-        .controls {
-            padding: 20px;
+        /* Canvas 生成的文字圖片 */
+        #canvas-image {
             width: 100%;
-            max-width: 500px;
-            background: #222;
-            z-index: 10;
+            height: 100%;
+            object-fit: fill; /* 強制填滿梯形區域 */
+            /* 噴漆質感濾鏡 */
+            filter: blur(0.6px) drop-shadow(4px 4px 8px rgba(0,0,0,0.7));
+            opacity: 0.95;
         }
 
-        textarea {
-            width: 100%; height: 50px; background: #333; border: 1px solid #444;
-            color: white; padding: 10px; border-radius: 8px; resize: none; margin-bottom: 10px;
+        /* App 控制介面 (上層) */
+        .ui-controls {
+            background: #1a1a1a; padding: 15px; display: flex; gap: 10px; z-index: 100;
+            border-top: 1px solid #333;
         }
-
-        button {
-            width: 100%; padding: 12px; background: #4CAF50; border: none;
-            color: white; border-radius: 8px; cursor: pointer; font-weight: bold;
-        }
+        input { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
+        button { background: #d32f2f; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: bold; font-size: 16px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
+<div class="app-container">
+    <div class="viewport">
         <video id="bg-video" playsinline muted>
             <source src="Train.mov" type="video/quicktime">
             <source src="Train.mov" type="video/mp4">
         </video>
 
-        <div class="perspective-layer">
-            <div id="mask-gate" class="trapezoid-board">
-                <div id="wall-text" class="text-strip">白六愛媽媽</div>
+        <div class="perspective-stage">
+            <div id="mask-gate" class="full-trapezoid">
+                <img id="canvas-image" alt="Message">
             </div>
         </div>
     </div>
 
-    <div class="controls">
-        <textarea id="userInput" placeholder="輸入文字..."></textarea>
-        <button onclick="playApp()">播放 App 效果</button>
+    <div class="ui-controls">
+        <input type="text" id="userInput" placeholder="輸入留言..." value="白六愛媽媽">
+        <button onclick="App.run()">播放</button>
     </div>
+</div>
 
-    <script>
-        const video = document.getElementById('bg-video');
-        const maskGate = document.getElementById('mask-gate');
-        const wallText = document.getElementById('wall-text');
-        const input = document.getElementById('userInput');
+<canvas id="hidden-canvas" style="display: none;"></canvas>
 
-        function playApp() {
-            const msg = input.value.trim() || "白六愛媽媽";
-            wallText.innerText = msg;
+<script>
+    const App = {
+        video: document.getElementById('bg-video'),
+        gate: document.getElementById('mask-gate'),
+        img: document.getElementById('canvas-image'),
+        input: document.getElementById('userInput'),
+        canvas: document.getElementById('hidden-canvas'),
+        config: { start: 3.51, end: 5.0 }, // 揭曉時間區間
 
-            // 1. 初始化遮罩：完全隱藏 (從左側遮擋 100%)
-            maskGate.style.transition = 'none';
-            maskGate.style.clipPath = 'inset(0 0 0 100%)';
+        // 核心功能：用 Canvas 生成滿版文字圖
+        generateImage: function(text) {
+            const ctx = this.canvas.getContext('2d');
+            // 設定一個高解析度的畫布尺寸
+            this.canvas.width = 2048;
+            this.canvas.height = 600;
 
-            video.currentTime = 0;
-            video.play();
+            // 清空畫布
+            ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-            // 2. 監控時間：3.51s 開始隨著車尾揭曉
-            // 假設車尾在 4.8s 完全離開綠板
-            const startTime = 3.51;
-            const endTime = 4.8;
+            // 設定文字樣式 (紅色、超大、粗體)
+            ctx.fillStyle = '#ff0000';
+            // 自動調整字體大小以填滿寬度
+            let fontSize = 550;
+            do {
+                ctx.font = `900 ${fontSize}px "Microsoft JhengHei", sans-serif`;
+                fontSize -= 10;
+            } while (ctx.measureText(text).width > this.canvas.width - 100 && fontSize > 100);
+            
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // 繪製文字
+            ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2);
+            
+            // 回傳圖片資料
+            return this.canvas.toDataURL('image/png');
+        },
 
-            const syncReveal = () => {
-                const now = video.currentTime;
+        run: function() {
+            const msg = this.input.value.trim();
+            if (!msg) return;
 
-                if (now >= startTime && now <= endTime) {
-                    // 計算百分比 (0 到 1)
-                    const progress = (now - startTime) / (endTime - startTime);
-                    // 遮罩邊界從 100% 降到 0%
-                    const revealVal = 100 - (progress * 100);
-                    maskGate.style.clipPath = `inset(0 0 0 ${revealVal}%)`;
-                } else if (now > endTime) {
-                    maskGate.style.clipPath = 'inset(0 0 0 0%)';
+            // 1. 生成圖片並更新 img src
+            this.img.src = this.generateImage(msg);
+            
+            // 2. 重置狀態
+            this.gate.style.transition = 'none';
+            this.gate.style.clipPath = 'inset(0 0 0 100%)';
+            this.video.currentTime = 0;
+            
+            // 3. 解決手機自動播放限制
+            const playPromise = this.video.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(() => {
+                    this.video.muted = true;
+                    this.video.play();
+                });
+            }
+
+            // 4. 開始同步揭曉動畫
+            this.sync();
+        },
+
+        sync: function() {
+            const update = () => {
+                const now = this.video.currentTime;
+                if (now >= this.config.start && now <= this.config.end) {
+                    const p = (now - this.config.start) / (this.config.end - this.config.start);
+                    // 遮罩邊界從 100% 縮減到 0%
+                    this.gate.style.clipPath = `inset(0 0 0 ${100 - (p * 100)}%)`;
+                } else if (now > this.config.end) {
+                    this.gate.style.clipPath = 'inset(0 0 0 0%)';
                 }
 
-                if (!video.paused && !video.ended) {
-                    requestAnimationFrame(syncReveal);
+                if (!this.video.paused && !this.video.ended) {
+                    requestAnimationFrame(update);
                 }
             };
-
-            requestAnimationFrame(syncReveal);
+            requestAnimationFrame(update);
         }
-    </script>
+    };
+</script>
 </body>
 </html>
