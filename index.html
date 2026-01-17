@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 影片導出版</title>
+    <title>地鐵留言 App - 直式錄影版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -13,17 +13,16 @@
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1600px; height: 600px; 
             transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
-            mix-blend-mode: multiply; opacity: 0.9;
+            mix-blend-mode: multiply; opacity: 0.92;
         }
         .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
         .row { display: flex; gap: 8px; align-items: center; }
-        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; font-size: 16px; }
-        button { background: #ff3b30; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
+        button { background: #ff3b30; color: white; border: none; padding: 12px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; }
         .btn-download { background: #34c759; }
-        .shared-mode .ui-bar { display: none; }
         #status-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.8); display: none; flex-direction: column;
+            background: rgba(0,0,0,0.9); display: none; flex-direction: column;
             justify-content: center; align-items: center; color: white; z-index: 1000;
         }
     </style>
@@ -31,8 +30,9 @@
 <body>
 
 <div id="status-overlay">
-    <h2>影片錄製中...</h2>
-    <p>請勿關閉視窗，完成後將自動下載</p>
+    <div style="border: 4px solid #f3f3f3; border-top: 4px solid #34c759; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite;"></div>
+    <h2 style="margin-top:20px;">直式影片錄製中...</h2>
+    <p>請維持視窗開啟</p>
 </div>
 
 <div class="app-container">
@@ -47,10 +47,7 @@
         <div class="row">
             <input type="text" id="userInput" placeholder="輸入內容..." value="白六愛媽媽">
             <button onclick="App.play()">預覽</button>
-            <button class="btn-download" onclick="App.exportVideo()">輸出影片</button>
-        </div>
-        <div class="row">
-            <button onclick="App.share()" style="background:#007aff;">複製分享網址</button>
+            <button class="btn-download" onclick="App.exportVideo()">導出直式影片</button>
         </div>
     </div>
 </div>
@@ -61,7 +58,8 @@
 <script>
 const App = {
     pts: [{x: 0.02, y: 0.38}, {x: 0.98, y: 0.26}, {x: 0.95, y: 0.74}, {x: 0.01, y: 0.55}],
-    timing: { start: 2.35, end: 3.73 },
+    // 延後 0.1 秒：2.35 -> 2.45
+    timing: { start: 2.45, end: 3.73 },
     video: document.getElementById('bg-video'),
     img: document.getElementById('canvas-image'),
 
@@ -104,7 +102,7 @@ const App = {
         cvs.width = 1600; cvs.height = 600;
         ctx.clearRect(0,0,1600,600);
         ctx.fillStyle = '#e60000';
-        ctx.font = '900 220px sans-serif';
+        ctx.font = '900 240px sans-serif'; // 再次加大字體
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(text, 800, 300);
         this.img.src = cvs.toDataURL();
@@ -116,18 +114,18 @@ const App = {
         
         const canvas = document.getElementById('export-cvs');
         const ctx = canvas.getContext('2d');
-        canvas.width = 1280; canvas.height = 720;
+        // 修正為直式比例 9:16
+        canvas.width = 720; canvas.height = 1280;
         
-        // 準備錄製
         const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 8000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 12000000 });
         const chunks = [];
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = 'train_msg.webm';
+            a.href = url; a.download = 'train_vertical.webm';
             a.click();
             document.getElementById('status-overlay').style.display = 'none';
         };
@@ -138,36 +136,36 @@ const App = {
 
         const drawLoop = () => {
             if (this.video.paused || this.video.ended) {
-                recorder.stop();
-                return;
+                recorder.stop(); return;
             }
-            // 1. 畫背景影片
-            ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
+            // 畫直式背景 (模擬 object-fit: cover)
+            const vRatio = this.video.videoWidth / this.video.videoHeight;
+            const cRatio = canvas.width / canvas.height;
+            let sx, sy, sw, sh;
+            if (vRatio > cRatio) {
+                sh = this.video.videoHeight; sw = sh * cRatio;
+                sx = (this.video.videoWidth - sw) / 2; sy = 0;
+            } else {
+                sw = this.video.videoWidth; sh = sw / cRatio;
+                sx = 0; sy = (this.video.videoHeight - sh) / 2;
+            }
+            ctx.drawImage(this.video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
             
-            // 2. 同步計算遮罩進度
+            // 同步遮罩
             const now = this.video.currentTime;
-            const dur = this.timing.end - this.timing.start;
-            let prog = 0;
-            if (now > this.timing.start) prog = Math.min(1, (now - this.timing.start) / dur);
-
-            // 3. 在畫布上模擬文字層 (這部分用簡單疊加模擬，若要 3D 需更複雜算法)
-            // 為了讓輸出影片也有文字「滑出」感，我們在 Canvas 上也套用同樣的 clip 邏輯
-            if (prog > 0) {
+            if (now >= this.timing.start) {
+                const prog = Math.min(1, (now - this.timing.start) / (this.timing.end - this.timing.start));
                 ctx.save();
-                // 這裡簡化處理：直接把呈現出來的 img 畫上去
-                // 注意：Canvas 錄製 CSS 變形層有極限，這裡採用直接抓取目前的畫面元素
-                ctx.globalAlpha = 0.9;
-                // 模擬揭開效果：只畫出揭開的部分
-                const clipX = canvas.width * (1 - prog);
+                // 限制繪製區域 (由右往左揭開)
                 ctx.beginPath();
-                ctx.rect(clipX, 0, canvas.width, canvas.height);
+                ctx.rect(canvas.width * (1 - prog), 0, canvas.width, canvas.height);
                 ctx.clip();
-                // 由於 matrix3d 無法直接轉 Canvas，錄影建議仍以螢幕錄影或後端合成最準
-                // 此處我們先確保文字在正確時間點才出現在畫布上
-                ctx.drawImage(this.img, 100, 250, 1000, 300); 
+                
+                // 將 3D 變形層畫入 Canvas (此處使用簡化縮放以維持直式對位)
+                ctx.globalAlpha = 0.9;
+                ctx.drawImage(this.img, 0, canvas.height * 0.35, canvas.width, canvas.height * 0.3);
                 ctx.restore();
             }
-
             requestAnimationFrame(drawLoop);
         };
         drawLoop();
@@ -194,5 +192,6 @@ const App = {
 };
 window.onload = () => App.init();
 </script>
+<style> @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } } </style>
 </body>
 </html>
