@@ -3,56 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 精準透視版</title>
+    <title>地鐵留言 App - 最終版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 1500px; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
         
-        /* 預覽文字層：恢復 matrix3d 設定 */
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1600px; height: 600px; 
             transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
             mix-blend-mode: multiply; opacity: 0.92;
         }
 
-        #kuo-end {
-            position: absolute; bottom: 80px; right: 20px; z-index: 999;
-            color: white; opacity: 0; transition: opacity 0.5s; pointer-events: none;
-            display: flex; align-items: flex-end; gap: 8px; font-family: serif;
+        /* 片尾 Logo 容器 */
+        #kuo-end-img {
+            position: absolute; bottom: 50px; right: 20px; width: 120px;
+            z-index: 999; opacity: 0; transition: opacity 0.5s; pointer-events: none;
         }
-        .nhk-logo { border: 2px solid white; padding: 2px 8px; font-size: 20px; font-weight: 900; }
-        .nhk-final { font-size: 40px; font-weight: bold; line-height: 1; }
 
-        .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; }
+        .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
         .row { display: flex; gap: 8px; }
-        input { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
-        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
+        input { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
+        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .preview-btn { background: #444; color: white; }
         .rec-btn { background: #FF3B30; color: #fff; }
+        .rec-btn:disabled { background: #666; opacity: 0.7; }
+
+        /* 下載完成提示 */
+        #toast { 
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #34c759; color: white; padding: 12px 24px; border-radius: 50px;
+            font-weight: bold; z-index: 2000; opacity: 0; transition: 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); pointer-events: none;
+        }
     </style>
 </head>
 <body>
+
+<div id="toast">✅ 錄製完成，檔案已下載！</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <div id="warp-layer"><img id="canvas-image"></div>
-        
-        <div id="kuo-end">
-            <span class="nhk-final">終</span>
-            <div style="display:flex; flex-direction:column; font-size:10px;">
-                <span>制作・著作</span>
-                <div class="nhk-logo">ＫＵＯ</div>
-            </div>
-        </div>
+        <img id="kuo-end-img" src="kuo_logo.png" alt="Logo">
     </div>
 
     <div class="ui-bar">
         <div class="row">
             <input type="text" id="userInput" value="新年快樂/2026">
-            <button onclick="App.play()">預覽</button>
-            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製 3D 影片</button>
+            <button class="preview-btn" onclick="App.play()">預覽</button>
+            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製影片</button>
         </div>
     </div>
 </div>
@@ -67,6 +69,7 @@ const App = {
     init: function() {
         this.v = document.getElementById('v');
         this.img = document.getElementById('canvas-image');
+        this.logoImg = document.getElementById('kuo-end-img');
         this.input = document.getElementById('userInput');
         
         window.addEventListener('resize', () => this.updateWarp());
@@ -78,7 +81,6 @@ const App = {
         const r = document.getElementById('stage').getBoundingClientRect();
         const w = 1600, h = 600;
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
-        // 恢復之前的 matrix3d 運算邏輯
         this.m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${this.m.join(',')})`;
     },
@@ -112,7 +114,7 @@ const App = {
 
     animate: function() {
         const cur = this.v.currentTime;
-        document.getElementById('kuo-end').style.opacity = (cur >= this.timing.showEnd) ? '1' : '0';
+        this.logoImg.style.opacity = (cur >= this.timing.showEnd) ? '1' : '0';
         
         const dur = this.timing.end - this.timing.start;
         if (cur >= this.timing.start && cur <= this.timing.end) {
@@ -124,6 +126,12 @@ const App = {
             this.img.style.clipPath = 'inset(0 0 0 100%)';
         }
         requestAnimationFrame(() => this.animate());
+    },
+
+    showToast: function() {
+        const toast = document.getElementById('toast');
+        toast.style.opacity = '1';
+        setTimeout(() => toast.style.opacity = '0', 3000);
     },
 
     startCapture: async function() {
@@ -143,8 +151,9 @@ const App = {
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_3D_Fixed.webm`; a.click();
-            btn.innerText = "錄製 3D 影片"; btn.disabled = false;
+            a.href = URL.createObjectURL(blob); a.download = `Train_3D.webm`; a.click();
+            btn.innerText = "錄製影片"; btn.disabled = false;
+            this.showToast(); // 顯示完成提示 [cite: 2025-12-28]
         };
 
         this.v.currentTime = 0;
@@ -153,51 +162,40 @@ const App = {
 
         const renderLoop = () => {
             if (recorder.state === "recording") {
-                // 1. 畫背景影片 (直式填充)
                 eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
-                
-                // 2. 畫 3D 透視文字
                 const cur = this.v.currentTime;
+                
                 if (cur >= this.timing.start) {
                     const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
                     eCtx.save();
-                    
-                    // 同步遮罩
                     eCtx.beginPath();
                     eCtx.rect(exportCanvas.width * (1 - prog), 0, exportCanvas.width, exportCanvas.height);
                     eCtx.clip();
 
-                    // 恢復 Matrix 投影到錄影畫布
                     const r = document.getElementById('stage').getBoundingClientRect();
                     const sX = exportCanvas.width / r.width;
                     const sY = exportCanvas.height / r.height;
-                    const m = this.m;
-                    // 將 matrix3d 同步到錄影 Canvas 的變換矩陣 [cite: 2025-12-28]
-                    eCtx.setTransform(m[0]*sX, m[1]*sY, m[4]*sX, m[5]*sY, m[12]*sX, m[13]*sY);
+                    eCtx.setTransform(this.m[0]*sX, this.m[1]*sY, this.m[4]*sX, this.m[5]*sY, this.m[12]*sX, this.m[13]*sY);
                     eCtx.globalAlpha = 0.9;
                     eCtx.drawImage(document.getElementById('temp-cvs'), 0, 0);
                     eCtx.restore();
                 }
 
-                // 3. 畫結尾浮水印
-                if (cur >= this.timing.showEnd) this.drawWatermark(eCtx, exportCanvas.width, exportCanvas.height);
+                // 在錄影畫布畫入 Logo 圖片 [cite: 2025-12-28]
+                if (cur >= this.timing.showEnd) {
+                    eCtx.save();
+                    eCtx.setTransform(1, 0, 0, 1, 0, 0);
+                    // 計算 Logo 在錄影畫布的位置 (右下角)
+                    const lw = 180, lh = 90;
+                    eCtx.drawImage(this.logoImg, exportCanvas.width - lw - 30, exportCanvas.height - lh - 80, lw, lh);
+                    eCtx.restore();
+                }
                 
                 if (this.v.ended) recorder.stop();
                 else requestAnimationFrame(renderLoop);
             }
         };
         renderLoop();
-    },
-
-    drawWatermark: function(ctx, w, h) {
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0); // 重置矩陣
-        ctx.fillStyle = "white"; ctx.shadowBlur = 10; ctx.shadowColor = "black";
-        ctx.font = "bold 48px serif"; ctx.fillText("終", w - 180, h - 100);
-        ctx.font = "bold 13px sans-serif"; ctx.fillText("制作・著作", w - 120, h - 125);
-        ctx.lineWidth = 2; ctx.strokeStyle = "white"; ctx.strokeRect(w - 120, h - 115, 80, 30);
-        ctx.font = "bold 20px sans-serif"; ctx.fillText("ＫＵＯ", w - 110, h - 92);
-        ctx.restore();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
