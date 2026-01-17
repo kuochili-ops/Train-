@@ -3,156 +3,210 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵隱藏留言 App - 定位校準版</title>
+    <title>地鐵留言 App - 四點定位版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
 
-        /* 影片區 */
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; }
-        video#bg-video { width: 100%; height: 100%; object-fit: cover; }
+        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; touch-action: none; }
+        video#bg-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
-        /* 留言板對位層 (這是關鍵框) */
-        .board-container {
+        /* 文字變形層 */
+        #warp-container {
             position: absolute;
-            z-index: 10;
-            pointer-events: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            /* 預設值，之後由滑桿控制 */
-            top: 25%;
-            left: 0;
-            width: 100%;
-            height: 35%;
-            perspective: 1000px;
-        }
-
-        .warp-panel {
-            width: 100%;
-            height: 100%;
-            transform-origin: center right;
-            clip-path: inset(0 0 0 100%); 
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10; pointer-events: none;
+            transform-style: preserve-3d;
         }
 
         #canvas-image {
-            width: 100%;
-            height: 100%;
-            object-fit: fill;
-            filter: drop-shadow(4px 4px 10px rgba(0,0,0,0.8));
-        }
-
-        /* 調校面板 (預設展開，調完可縮小) */
-        .debug-panel {
             position: absolute;
-            bottom: 80px; left: 10px; right: 10px;
-            background: rgba(0,0,0,0.85);
-            padding: 10px; border-radius: 10px;
-            color: #0f0; font-family: monospace; font-size: 10px;
-            display: grid; grid-template-columns: 1fr 2fr; gap: 5px;
-            z-index: 200;
+            top: 0; left: 0;
+            width: 500px; height: 200px; /* 原始比例 */
+            transform-origin: 0 0;
+            clip-path: inset(0 0 0 100%);
+            filter: drop-shadow(2px 2px 5px rgba(0,0,0,0.5));
         }
 
-        /* UI 控制區 */
-        .ui-bar { background: #111; padding: 15px; display: flex; gap: 10px; z-index: 100; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 5px; }
-        button { background: #4CAF50; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; }
+        /* 定位點樣式 */
+        .dot {
+            position: absolute;
+            width: 30px; height: 30px;
+            background: rgba(255, 0, 0, 0.6);
+            border: 2px solid white;
+            border-radius: 50%;
+            z-index: 100;
+            transform: translate(-50%, -50%);
+            touch-action: none;
+        }
+
+        /* 控制列 */
+        .ui-bar { background: #111; padding: 10px; display: flex; gap: 8px; z-index: 200; border-top: 1px solid #333; }
+        input { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 5px; }
+        button { background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; }
+        .debug-info { position: absolute; top: 10px; left: 10px; color: #0f0; font-size: 10px; z-index: 300; pointer-events: none; background: rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    <div class="viewport">
+    <div class="viewport" id="stage">
         <video id="bg-video" playsinline muted>
             <source src="Train.mov" type="video/quicktime">
             <source src="Train.mov" type="video/mp4">
         </video>
 
-        <div id="board-pos" class="board-container">
-            <div id="mask-gate" class="warp-panel">
-                <img id="canvas-image">
-            </div>
+        <div id="warp-container">
+            <img id="canvas-image">
         </div>
-        
-        <div class="debug-panel" id="debugUI">
-            <label>垂直位置 %</label><input type="range" id="p-top" min="0" max="100" value="25">
-            <label>高度 %</label><input type="range" id="p-height" min="10" max="80" value="35">
-            <label>透視角度</label><input type="range" id="p-rotate" min="-70" max="0" value="-48">
-            <label>傾斜修正</label><input type="range" id="p-skew" min="-20" max="20" value="-8">
-            <label>同步時間</label><input type="range" id="p-start" min="300" max="400" value="351">
-            <div id="current-vals" style="grid-column: span 2; text-align: center;">調校中...</div>
-        </div>
+
+        <div id="dot0" class="dot" style="top: 30%; left: 10%;"></div>
+        <div id="dot1" class="dot" style="top: 30%; left: 90%;"></div>
+        <div id="dot2" class="dot" style="top: 60%; left: 90%;"></div>
+        <div id="dot3" class="dot" style="top: 60%; left: 10%;"></div>
+
+        <div class="debug-info" id="debug">拖動紅點對齊綠板四角</div>
     </div>
 
     <div class="ui-bar">
         <input type="text" id="userInput" value="白六愛媽媽">
-        <button onclick="App.run()">播放</button>
-        <button onclick="document.getElementById('debugUI').style.display='none'" style="background:#555">隱藏調校</button>
+        <button onclick="App.run()">播放同步</button>
+        <button onclick="App.toggleDots()" style="background:#555">隱藏點</button>
     </div>
 </div>
 
 <canvas id="temp-canvas" style="display:none;"></canvas>
 
 <script>
-    const App = {
-        video: document.getElementById('bg-video'),
-        gate: document.getElementById('mask-gate'),
-        img: document.getElementById('canvas-image'),
-        canvas: document.getElementById('temp-canvas'),
+/**
+ * 頂點對位與同步模組 [cite: 2025-12-19]
+ */
+const App = {
+    dots: [
+        {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}
+    ],
+    video: document.getElementById('bg-video'),
+    img: document.getElementById('canvas-image'),
+    
+    init: function() {
+        const stage = document.getElementById('stage');
+        const dotElems = [0,1,2,3].map(i => document.getElementById('dot'+i));
+        
+        // 初始化點位置
+        dotElems.forEach((el, i) => {
+            const rect = stage.getBoundingClientRect();
+            this.dots[i].x = parseFloat(el.style.left) / 100 * rect.width;
+            this.dots[i].y = parseFloat(el.style.top) / 100 * rect.height;
 
-        run: function() {
-            // 讀取滑桿數值
-            const top = document.getElementById('p-top').value;
-            const height = document.getElementById('p-height').value;
-            const rotate = document.getElementById('p-rotate').value;
-            const skew = document.getElementById('p-skew').value;
-            const startSec = document.getElementById('p-start').value / 100;
-
-            // 套用位置
-            const container = document.getElementById('board-pos');
-            container.style.top = top + "%";
-            container.style.height = height + "%";
-            this.gate.style.transform = `rotateY(${rotate}deg) skewY(${skew}deg)`;
-            
-            // 顯示數值供以後固定
-            document.getElementById('current-vals').innerText = `TOP:${top} H:${height} ROT:${rotate} SKEW:${skew} START:${startSec}`;
-
-            // 生成圖片
-            this.render(document.getElementById('userInput').value);
-            
-            // 播放
-            this.gate.style.clipPath = 'inset(0 0 0 100%)';
-            this.video.currentTime = 0;
-            this.video.play();
-            this.sync(startSec);
-        },
-
-        render: function(text) {
-            const ctx = this.canvas.getContext('2d');
-            this.canvas.width = 2000; this.canvas.height = 800;
-            ctx.clearRect(0, 0, 2000, 800);
-            ctx.fillStyle = '#ff0000';
-            ctx.font = '900 600px sans-serif';
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(text, 1000, 400);
-            this.img.src = this.canvas.toDataURL();
-        },
-
-        sync: function(startTime) {
-            const endTime = startTime + 1.4; // 列車通過持續時間約 1.4 秒
-            const loop = () => {
-                const now = this.video.currentTime;
-                if (now >= startTime && now <= endTime) {
-                    const p = (now - startTime) / (endTime - startTime);
-                    this.gate.style.clipPath = `inset(0 0 0 ${100 - (p * 100)}%)`;
-                } else if (now > endTime) {
-                    this.gate.style.clipPath = 'inset(0 0 0 0%)';
+            // 拖動邏輯
+            el.addEventListener('pointermove', (e) => {
+                if (e.buttons > 0) {
+                    const r = stage.getBoundingClientRect();
+                    this.dots[i].x = e.clientX - r.left;
+                    this.dots[i].y = e.clientY - r.top;
+                    el.style.left = this.dots[i].x + "px";
+                    el.style.top = this.dots[i].y + "px";
+                    this.updateWarp();
                 }
-                if (!this.video.paused && !this.video.ended) requestAnimationFrame(loop);
-            };
-            requestAnimationFrame(loop);
-        }
+            });
+        });
+        this.updateWarp();
+    },
+
+    // 計算 Matrix3D 變形矩陣 (Corner Pinning 演算法)
+    updateWarp: function() {
+        const w = 500, h = 200; // 原始文字寬高
+        const d = this.dots;
+        
+        // 簡化版矩陣變形計算
+        // 為了讓文字貼合四角，我們計算從 (0,0, w,0, w,h, 0,h) 到四個點的變換
+        // 這裡直接套用計算好的 CSS 變形
+        this.img.style.transform = this.getTransform(0, 0, w, 0, w, h, 0, h, d[0].x, d[0].y, d[1].x, d[1].y, d[2].x, d[2].y, d[3].x, d[3].y);
+    },
+
+    getTransform: function(x1, y1, x2, y2, x3, y3, x4, y4, y11, y12, y21, y22, y31, y32, y41, y42) {
+        // 此處省略複雜的 Homography 矩陣運算，使用簡化方案達成效果
+        // 實際應用中可引入矩陣庫，此處為示範對位
+        return `matrix3d(...)`; // 代碼中將實作完整運算
+    },
+
+    run: function() {
+        this.renderText(document.getElementById('userInput').value);
+        this.video.currentTime = 0;
+        this.video.play();
+        
+        const start = 3.51; // 車尾出現
+        const end = 4.75;   // 車尾完全開走
+        
+        const sync = () => {
+            const now = this.video.currentTime;
+            if (now >= start && now <= end) {
+                const p = (now - start) / (end - start);
+                // 同步關鍵：這條公式決定了字體出現的速度
+                // 如果字跟不上，可以給 p 加上加權，例如 p = Math.pow(p, 0.8)
+                this.img.style.clipPath = `inset(0 0 0 ${100 - (p * 100)}%)`;
+            } else if (now > end) {
+                this.img.style.clipPath = 'inset(0 0 0 0%)';
+            }
+            if (!this.video.paused) requestAnimationFrame(sync);
+        };
+        requestAnimationFrame(sync);
+    },
+
+    renderText: function(text) {
+        const cvs = document.getElementById('temp-canvas');
+        const ctx = cvs.getContext('2d');
+        cvs.width = 1000; cvs.height = 400;
+        ctx.fillStyle = '#ff0000';
+        ctx.font = '900 300px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(text, 500, 200);
+        this.img.src = cvs.toDataURL();
+    },
+
+    toggleDots: function() {
+        const display = document.getElementById('dot0').style.display === 'none' ? 'block' : 'none';
+        [0,1,2,3].forEach(i => document.getElementById('dot'+i).style.display = display);
+    }
+};
+
+// 輔助矩陣計算函數 (Homography)
+// (因篇幅限制，此處使用簡化的矩陣代換實現)
+App.getTransform = function(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4) {
+    var adj = function(m) {
+        return [
+            m[4] * m[8] - m[5] * m[7], m[2] * m[7] - m[1] * m[8], m[1] * m[4] - m[2] * m[5],
+            m[5] * m[6] - m[3] * m[8], m[0] * m[8] - m[2] * m[6], m[2] * m[3] - m[0] * m[5],
+            m[3] * m[7] - m[4] * m[6], m[1] * m[6] - m[0] * m[7], m[0] * m[4] - m[1] * m[3]
+        ];
     };
+    var mult = function(a, b) {
+        var c = Array(9);
+        for (var i = 0; i < 3; i++) {
+            for (var j = 0; j < 3; j++) {
+                var s = 0;
+                for (var k = 0; k < 3; k++) s += a[i * 3 + k] * b[k * 3 + j];
+                c[i * 3 + j] = s;
+            }
+        }
+        return c;
+    };
+    var basisToPoints = function(x1, y1, x2, y2, x3, y3, x4, y4) {
+        var m = [ x1, x2, x3, y1, y2, y3, 1, 1, 1 ];
+        var v = mult(adj(m), [x4, y4, 1]);
+        return mult(m, [v[0], 0, 0, 0, v[1], 0, 0, 0, v[2]]);
+    };
+    var general2DProjection = function(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4) {
+        var s = basisToPoints(x1, y1, x2, y2, x3, y3, x4, y4);
+        var d = basisToPoints(px1, py1, px2, py2, px3, py3, px4, py4);
+        return mult(d, adj(s));
+    };
+    var t = general2DProjection(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4);
+    for (var i = 0; i < 9; i++) t[i] /= t[8];
+    return "matrix3d(" + [t[0], t[3], 0, t[6], t[1], t[4], 0, t[7], 0, 0, 1, 0, t[2], t[5], 0, t[8]].join(',') + ")";
+};
+
+window.onload = () => App.init();
 </script>
 </body>
 </html>
