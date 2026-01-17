@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 震撼版</title>
+    <title>地鐵 3D 最終修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 1500px; display: flex; align-items: center; justify-content: center; }
         
-        /* 影片與投影層 */
         video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2;
             clip-path: inset(0 0 0 100%); 
-            mix-blend-mode: multiply; opacity: 0.9;
+            mix-blend-mode: multiply; opacity: 0.95;
             pointer-events: none;
         }
 
@@ -24,7 +23,6 @@
             z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen;
         }
 
-        /* 介面樣式 */
         .ui-bar { 
             background: rgba(15, 15, 15, 0.98); padding: 15px; 
             display: flex; flex-direction: column; gap: 10px; 
@@ -37,20 +35,17 @@
         input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
         input[type="color"] { width: 45px; height: 45px; border: none; background: none; cursor: pointer; }
         
-        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
         .share-btn { background: #007AFF; color: white; }
         .rec-btn { background: #E02020; color: #fff; }
-        .toggle-ui { position: absolute; top: -35px; right: 20px; background: #111; color: #888; padding: 4px 15px; border-radius: 8px 8px 0 0; font-size: 11px; border: 1px solid #333; border-bottom: none; }
+        .toggle-ui { position: absolute; top: -35px; right: 20px; background: #111; color: #888; padding: 4px 15px; border-radius: 8px 8px 0 0; font-size: 11px; border: 1px solid #333; }
 
         #status-toast { 
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             background: #28a745; color: white; padding: 10px 25px; border-radius: 50px;
             z-index: 2000; opacity: 0; transition: 0.4s; pointer-events: none;
         }
-
-        /* 錯誤提示 */
-        #video-error { position: absolute; color: #555; font-size: 14px; z-index: 0; text-align: center; width: 80%; }
 
         body.share-mode .ui-bar { display: none !important; }
     </style>
@@ -61,7 +56,6 @@
 
 <div class="app-container">
     <div class="viewport" id="stage">
-        <div id="video-error">正在載入影片資源...<br>(若長時間無畫面請檢查檔案路徑)</div>
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <img id="canvas-image">
         <img id="kuo-end-img" src="IMG_6604.png">
@@ -70,8 +64,8 @@
     <div class="ui-bar" id="mainUI">
         <button class="toggle-ui" onclick="document.getElementById('mainUI').classList.toggle('collapsed')">收合介面</button>
         <div class="row">
-            <input type="color" id="textColor" value="#d10000">
-            <input type="text" id="userInput" placeholder="輸入內容 (一行最多6字)">
+            <input type="color" id="textColor" value="#e60000">
+            <input type="text" id="userInput" placeholder="輸入內容 (單行限6字，自動調整高度)">
         </div>
         <div class="row">
             <button class="preview-btn" onclick="App.play()">預覽效果</button>
@@ -85,10 +79,10 @@
 
 <script>
 const App = {
-    // 再次優化透視點，確保貼合度
+    // 再次向左右極限展延 5%，確保文字貼合車廂牆面 [cite: 2026-01-18]
     pts: [
-        {x: 0.08, y: 0.38}, {x: 0.92, y: 0.28}, 
-        {x: 0.90, y: 0.75}, {x: 0.06, y: 0.55}
+        {x: 0.05, y: 0.38}, {x: 0.95, y: 0.26}, 
+        {x: 0.94, y: 0.76}, {x: 0.04, y: 0.58}
     ],
     timing: { start: 2.55, end: 3.83 }, 
     
@@ -99,11 +93,6 @@ const App = {
         this.input = document.getElementById('userInput');
         this.colorPicker = document.getElementById('textColor');
         
-        // 影片載入監聽
-        this.v.addEventListener('error', () => {
-            document.getElementById('video-error').innerHTML = "❌ 找不到影片檔案 'Train.mov'<br>請確保網頁與影片放在同一個資料夾。";
-        });
-
         const params = new URLSearchParams(window.location.search);
         if (params.has('msg')) {
             this.input.value = decodeURIComponent(params.get('msg'));
@@ -111,7 +100,6 @@ const App = {
             document.body.classList.add('share-mode');
             this.v.oncanplay = () => this.play(); 
         }
-
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.animate();
@@ -139,12 +127,7 @@ const App = {
     play: function() {
         this.renderOffscreenText();
         this.v.currentTime = 0;
-        const p = this.v.play();
-        if (p !== undefined) p.catch(() => {
-            // 處理自動播放被阻擋的情況
-            this.v.muted = true;
-            this.v.play();
-        });
+        this.v.play();
     },
 
     renderOffscreenText: function() {
@@ -161,22 +144,26 @@ const App = {
             for (let i = 0; i < text.length; i += 6) lines.push(text.substring(i, i + 6));
         }
 
+        // 核心邏輯：自動調整高度 [cite: 2026-01-18]
+        let baseSize = 450; 
+        // 隨行數增加縮小高度倍率，且字與字之間保持窄間距
+        let finalSize = baseSize / (lines.length > 1 ? (lines.length * 0.95) : 1);
+        let stretchY = 1.5; 
+        let stretchX = 0.65; // 極度瘦長
+
         ctx.save();
+        ctx.translate(1750, 400); // 靠右中心點
+        ctx.scale(stretchX, stretchY); 
+
         ctx.fillStyle = this.colorPicker.value;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        
-        let baseSize = 420;
-        let finalSize = baseSize / (lines.length > 1 ? lines.length * 0.85 : 1);
-        
-        // 瘦長核心設定：水平壓縮、垂直拉長
-        ctx.translate(1750, 400); 
-        ctx.scale(0.72, 1.45); 
+        ctx.font = `900 ${finalSize}px "Arial Black", "Impact", sans-serif`;
 
         lines.forEach((line, i) => {
+            // 計算 Y 軸位移，確保多行時高度適配 [cite: 2026-01-18]
             const yOffset = (i - (lines.length - 1) / 2) * (finalSize * 0.9);
-            ctx.font = `900 ${finalSize}px "Arial Black", "Impact", sans-serif`;
-            ctx.fillText(line, 0, yOffset / 1.45);
+            ctx.fillText(line, 0, yOffset / stretchY);
         });
         ctx.restore();
         this.img.src = cvs.toDataURL();
@@ -199,7 +186,7 @@ const App = {
 
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
-        btn.innerText = "錄製中"; btn.disabled = true;
+        btn.innerText = "..."; btn.disabled = true;
         this.renderOffscreenText();
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = 720; exportCanvas.height = 1280;
