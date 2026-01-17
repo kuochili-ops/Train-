@@ -3,42 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 最終校準版</title>
+    <title>地鐵留言 App - 分享模式</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 1500px; }
         video#bg-video { width: 100%; height: 100%; object-fit: cover; }
         #warp-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; transform-style: preserve-3d; }
-        
         #canvas-image { 
-            position: absolute; top: 0; left: 0; 
-            width: 1200px; height: 400px; /* 增加寬度緩衝 */
-            transform-origin: 0 0; 
-            clip-path: inset(0 0 0 100%); 
-            filter: drop-shadow(4px 4px 12px rgba(0,0,0,0.6)); 
-            opacity: 0.98;
-            will-change: transform, clip-path;
+            position: absolute; top: 0; left: 0; width: 1200px; height: 600px; 
+            transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
+            filter: drop-shadow(4px 4px 15px rgba(0,0,0,0.6)); opacity: 0.95;
         }
 
-        .ui-bar { background: #1a1a1a; padding: 20px; display: flex; gap: 10px; z-index: 200; border-top: 1px solid #333; }
-        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
-        button { background: #ff3b30; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        /* UI 介面 - 增加分享與顏色功能 */
+        .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; transition: 0.3s; }
+        .row { display: flex; gap: 8px; align-items: center; }
+        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; }
+        button { background: #ff3b30; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .color-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; }
+        
+        /* 隱藏介面模式 */
+        .hidden-ui .ui-bar { display: none; }
     </style>
 </head>
-<body>
+<body class="">
 
 <div class="app-container">
     <div class="viewport" id="stage">
-        <video id="bg-video" playsinline muted>
+        <video id="bg-video" playsinline muted loop>
             <source src="Train.mov" type="video/quicktime">
             <source src="Train.mov" type="video/mp4">
         </video>
         <div id="warp-layer"><img id="canvas-image"></div>
     </div>
-    <div class="ui-bar">
-        <input type="text" id="userInput" value="白六愛媽媽">
-        <button onclick="App.play()">執行播放</button>
+
+    <div class="ui-bar" id="uiBar">
+        <div class="row">
+            <input type="text" id="userInput" placeholder="輸入留言...">
+            <button onclick="App.play()">播放效果</button>
+        </div>
+        <div class="row">
+            <div class="color-btn" style="background:#e60000;" onclick="App.setColor('#e60000')"></div>
+            <div class="color-btn" style="background:#ffcc00;" onclick="App.setColor('#ffcc00')"></div>
+            <div class="color-btn" style="background:#ffffff;" onclick="App.setColor('#ffffff')"></div>
+            <div class="color-btn" style="background:#00ff00;" onclick="App.setColor('#00ff00')"></div>
+            <button onclick="App.share()" style="background:#007aff; margin-left: auto;">分享連結</button>
+        </div>
     </div>
 </div>
 
@@ -46,30 +57,53 @@
 
 <script>
 /**
- * 針對「兩邊被切」與「出現太早」優化
+ * 高度自定義模組 [cite: 2025-12-19, 2025-12-28]
  */
 const App = {
-    // 根據回報座標微調，確保在綠幕內部
     pts: [
-        {x: 0.0800, y: 0.3950}, 
-        {x: 0.9350, y: 0.2950}, 
-        {x: 0.9150, y: 0.6900}, 
-        {x: 0.0700, y: 0.5250}  
+        {x: 0.0400, y: 0.3800}, // 左上 (再往外拉)
+        {x: 0.9600, y: 0.2800}, // 右上 (再往外拉)
+        {x: 0.9400, y: 0.7200}, // 右下
+        {x: 0.0300, y: 0.5400}  // 左下
     ],
-    // 延後開始時間，保持結束時間
-    timing: { start: 2.40, end: 3.73 }, 
+    timing: { start: 2.40, end: 3.73 },
+    textColor: '#e60000',
     
     video: document.getElementById('bg-video'),
     img: document.getElementById('canvas-image'),
     
     init: function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedText = urlParams.get('msg');
+        const sharedColor = urlParams.get('clr');
+        
+        if (sharedText) {
+            document.body.classList.add('hidden-ui');
+            document.getElementById('userInput').value = decodeURIComponent(sharedText);
+            if (sharedColor) this.textColor = '#' + sharedColor;
+            // 延遲一秒自動播放
+            setTimeout(() => this.play(), 1000);
+        }
+
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
     },
 
+    setColor: function(c) { this.textColor = c; },
+
+    share: function() {
+        const msg = encodeURIComponent(document.getElementById('userInput').value);
+        const clr = this.textColor.replace('#', '');
+        const shareUrl = `${window.location.origin}${window.location.pathname}?msg=${msg}&clr=${clr}`;
+        
+        navigator.clipboard.writeText(shareUrl).then(() => {
+            alert('分享連結已複製！傳送給朋友後，他們將只會看到影片。');
+        });
+    },
+
     updateWarp: function() {
         const rect = document.getElementById('stage').getBoundingClientRect();
-        const w = 1200, h = 400; 
+        const w = 1200, h = 600; 
         const p = this.pts.map(pt => ({ x: pt.x * rect.width, y: pt.y * rect.height }));
         const m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${m.join(',')})`;
@@ -84,17 +118,15 @@ const App = {
         const sync = () => {
             const now = this.video.currentTime;
             const dur = this.timing.end - this.timing.start;
-            
             if (now >= this.timing.start && now <= this.timing.end) {
                 let progress = (now - this.timing.start) / dur;
-                // 確保揭開速度與車速匹配
                 this.img.style.clipPath = `inset(0 0 0 ${100 - (progress * 100)}%)`;
             } else if (now > this.timing.end) {
                 this.img.style.clipPath = 'inset(0 0 0 0%)';
             } else {
                 this.img.style.clipPath = 'inset(0 0 0 100%)';
             }
-            if (!this.video.paused && !this.video.ended) requestAnimationFrame(sync);
+            if (!this.video.paused) requestAnimationFrame(sync);
         };
         requestAnimationFrame(sync);
     },
@@ -102,24 +134,33 @@ const App = {
     renderText: function(text) {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
-        const w = 1200, h = 400;
+        const w = 1200, h = 600;
         cvs.width = w; cvs.height = h;
         ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = this.textColor;
         
-        ctx.fillStyle = '#e60000';
-        let fontSize = 250;
-        ctx.font = `900 ${fontSize}px "Microsoft JhengHei", sans-serif`;
+        let fontSize = 280;
+        ctx.font = `900 ${fontSize}px sans-serif`;
         
-        // 自動縮小字體以適應寬度，避免兩邊被切掉
-        const maxWidth = w * 0.9;
-        while (ctx.measureText(text).width > maxWidth && fontSize > 50) {
-            fontSize -= 10;
-            ctx.font = `900 ${fontSize}px "Microsoft JhengHei", sans-serif`;
+        // 分行邏輯
+        let lines = [];
+        if (text.length > 5) {
+            lines.push(text.slice(0, Math.ceil(text.length / 2)));
+            lines.push(text.slice(Math.ceil(text.length / 2)));
+            fontSize = 180;
+        } else {
+            lines.push(text);
         }
-        
-        ctx.textAlign = 'center'; 
+
+        ctx.font = `900 ${fontSize}px sans-serif`;
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(text, w / 2, h / 2);
+        
+        lines.forEach((line, i) => {
+            const y = (h / 2) + (i - (lines.length - 1) / 2) * (fontSize * 1.1);
+            ctx.fillText(line, w / 2, y);
+        });
+        
         this.img.src = cvs.toDataURL();
     },
 
