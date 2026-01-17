@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 最終正式版</title>
+    <title>地鐵留言 App - 最終去背版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -16,10 +16,14 @@
             mix-blend-mode: multiply; opacity: 0.92;
         }
 
-        /* 片尾 Logo 圖片 */
+        /* Logo 去背與顯示設定 */
         #kuo-end-img {
-            position: absolute; bottom: 80px; right: 25px; width: 110px;
-            z-index: 999; opacity: 0; transition: opacity 0.5s; pointer-events: none;
+            position: absolute; bottom: 80px; right: 25px; width: 120px;
+            z-index: 999; opacity: 0; transition: opacity 0.8s ease; 
+            pointer-events: none;
+            /* 自動去背關鍵：濾掉黑色背景 */
+            mix-blend-mode: screen; 
+            filter: brightness(1.2);
         }
 
         .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
@@ -28,24 +32,18 @@
         button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #444; color: white; }
         .rec-btn { background: #FF3B30; color: #fff; }
-        .rec-btn:disabled { background: #555; opacity: 0.6; }
 
-        /* 完成提示框 (Toast) */
         #status-toast { 
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             background: #4cd964; color: white; padding: 10px 25px; border-radius: 12px;
             font-weight: bold; z-index: 2000; opacity: 0; transition: 0.4s ease;
             box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: none;
-            display: flex; align-items: center; gap: 8px;
         }
     </style>
 </head>
 <body>
 
-<div id="status-toast">
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="white"><path d="M0 11l2-2 5 5L18 3l2 2L7 18z"/></svg>
-    錦起完成，開扉已下載！
-</div>
+<div id="status-toast">✅ 錦起完成，開扉已下載！</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
@@ -68,7 +66,8 @@
 <script>
 const App = {
     pts: [{x: 0.02, y: 0.38}, {x: 0.98, y: 0.26}, {x: 0.95, y: 0.74}, {x: 0.01, y: 0.55}],
-    timing: { start: 2.45, end: 3.73, showEnd: 4.8 }, 
+    // 文字開始時間延後 0.1s 至 2.55s
+    timing: { start: 2.55, end: 3.83 }, 
     
     init: function() {
         this.v = document.getElementById('v');
@@ -102,14 +101,11 @@ const App = {
         const text = this.input.value;
         cvs.width = 1600; cvs.height = 600;
         ctx.clearRect(0,0,1600,600);
-        
         let lines = text.includes('/') ? text.split('/') : [text];
         let fontSize = lines.length > 1 ? 160 : 240;
-        
         ctx.fillStyle = '#e60000';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = `900 ${fontSize}px sans-serif`;
-
         lines.forEach((line, i) => {
             const y = 300 + (i - (lines.length-1)/2) * (fontSize * 1.1);
             ctx.fillText(line, 800, y);
@@ -119,11 +115,16 @@ const App = {
 
     animate: function() {
         const cur = this.v.currentTime;
-        this.logoImg.style.opacity = (cur >= this.timing.showEnd) ? '1' : '0';
+        const dur = this.v.duration;
         
-        const dur = this.timing.end - this.timing.start;
+        // Logo 在影片結束前 2 秒出現
+        if (dur > 0) {
+            this.logoImg.style.opacity = (cur >= dur - 2) ? '1' : '0';
+        }
+        
+        const clipDur = this.timing.end - this.timing.start;
         if (cur >= this.timing.start && cur <= this.timing.end) {
-            const prog = (cur - this.timing.start) / dur;
+            const prog = (cur - this.timing.start) / clipDur;
             this.img.style.clipPath = `inset(0 0 0 ${100 - (prog * 100)}%)`;
         } else if (cur > this.timing.end) {
             this.img.style.clipPath = 'inset(0 0 0 0%)';
@@ -150,10 +151,8 @@ const App = {
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Train_3D_Export.webm`; a.click();
+            a.href = URL.createObjectURL(blob); a.download = `Train_Final.webm`; a.click();
             btn.innerText = "錄製影片"; btn.disabled = false;
-            
-            // 顯示下載完成提示
             this.toast.style.opacity = "1";
             setTimeout(() => this.toast.style.opacity = "0", 3000);
         };
@@ -166,14 +165,15 @@ const App = {
             if (recorder.state === "recording") {
                 eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
                 const cur = this.v.currentTime;
+                const dur = this.v.duration;
                 
+                // 1. 畫文字
                 if (cur >= this.timing.start) {
                     const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
                     eCtx.save();
                     eCtx.beginPath();
                     eCtx.rect(exportCanvas.width * (1 - prog), 0, exportCanvas.width, exportCanvas.height);
                     eCtx.clip();
-
                     const r = document.getElementById('stage').getBoundingClientRect();
                     const sX = exportCanvas.width / r.width;
                     const sY = exportCanvas.height / r.height;
@@ -183,13 +183,15 @@ const App = {
                     eCtx.restore();
                 }
 
-                if (cur >= this.timing.showEnd) {
+                // 2. 畫 Logo (結束前 2 秒)
+                if (cur >= dur - 2) {
                     eCtx.save();
                     eCtx.setTransform(1, 0, 0, 1, 0, 0);
-                    // 根據 720x1280 解析度微調 Logo 位置與大小
-                    const logoW = 180; 
+                    // 模擬 screen 混合模式錄製到影片中
+                    eCtx.globalCompositeOperation = 'screen';
+                    const logoW = 160; 
                     const logoH = logoW * (this.logoImg.naturalHeight / this.logoImg.naturalWidth);
-                    eCtx.drawImage(this.logoImg, exportCanvas.width - logoW - 40, exportCanvas.height - logoH - 120, logoW, logoH);
+                    eCtx.drawImage(this.logoImg, exportCanvas.width - logoW - 40, exportCanvas.height - logoH - 100, logoW, logoH);
                     eCtx.restore();
                 }
                 
@@ -219,7 +221,6 @@ const App = {
         return [x[0],x[3],0,x[6],x[1],x[4],0,x[7],0,0,1,0,x[2],x[5],0,1];
     }
 };
-
 window.onload = () => App.init();
 </script>
 </body>
