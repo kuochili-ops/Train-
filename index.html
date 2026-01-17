@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 留言分享版</title>
+    <title>地鐵 3D 震撼分享版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -41,12 +41,11 @@
         .toggle-ui { position: absolute; top: -40px; right: 15px; background: rgba(0,0,0,0.6); color: #fff; padding: 5px 15px; border-radius: 8px 8px 0 0; font-size: 12px; }
 
         #status-toast { 
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            position: fixed; top: 20px; left: 50%; transform: translateX(50%);
             background: #4cd964; color: white; padding: 10px 25px; border-radius: 12px;
             z-index: 2000; opacity: 0; transition: 0.4s ease; pointer-events: none;
         }
 
-        /* 分享模式隱藏介面 */
         body.share-mode .ui-bar { display: none !important; }
     </style>
 </head>
@@ -65,11 +64,11 @@
         <button class="toggle-ui" onclick="document.getElementById('mainUI').classList.toggle('collapsed')">收合/展開介面</button>
         <div class="row">
             <input type="color" id="textColor" value="#e60000">
-            <input type="text" id="userInput" placeholder="輸入內容 (將右對齊顯示)">
+            <input type="text" id="userInput" placeholder="輸入內容 (靠右/震撼字體)">
         </div>
         <div class="row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
-            <button class="share-btn" onclick="App.generateShareUrl()">分享</button>
+            <button class="share-btn" onclick="App.generateShareUrl()">分享連結</button>
             <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製</button>
         </div>
     </div>
@@ -79,7 +78,13 @@
 
 <script>
 const App = {
-    pts: [{x: 0.12, y: 0.40}, {x: 0.88, y: 0.30}, {x: 0.86, y: 0.70}, {x: 0.10, y: 0.52}],
+    // 左右邊界外展修正
+    pts: [
+        {x: 0.08, y: 0.38}, // 左上 (向外展)
+        {x: 0.94, y: 0.28}, // 右上 (向外展)
+        {x: 0.92, y: 0.72}, // 右下 (向外展)
+        {x: 0.06, y: 0.54}  // 左下 (向外展)
+    ],
     timing: { start: 2.55, end: 3.83 }, 
     
     init: function() {
@@ -89,13 +94,12 @@ const App = {
         this.input = document.getElementById('userInput');
         this.colorPicker = document.getElementById('textColor');
         
-        // 檢查 URL 參數（分享模式）
         const params = new URLSearchParams(window.location.search);
         if (params.has('msg')) {
             this.input.value = decodeURIComponent(params.get('msg'));
             this.colorPicker.value = '#' + params.get('clr');
             document.body.classList.add('share-mode');
-            setTimeout(() => this.play(), 1000); // 自動播放
+            setTimeout(() => this.play(), 800);
         }
 
         window.addEventListener('resize', () => this.updateWarp());
@@ -141,17 +145,16 @@ const App = {
             for (let i = 0; i < text.length; i += 5) lines.push(text.substring(i, i + 5));
         }
 
-        // 提高字級增加震撼感
-        let fontSize = lines.length > 1 ? 200 : 320; 
+        let fontSize = lines.length > 1 ? 220 : 340; // 字體再次加大
         ctx.fillStyle = this.colorPicker.value;
-        ctx.textAlign = 'right'; // 靠右對齊
+        ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.font = `900 ${fontSize}px "Arial Black", sans-serif`;
+        ctx.font = `900 ${fontSize}px "Arial Black", "Microsoft JhengHei", sans-serif`;
 
         lines.forEach((line, i) => {
-            const y = 400 + (i - (lines.length - 1) / 2) * (fontSize * 1.1);
-            // 繪製於畫布右側，保留一點邊距 (1700)
-            ctx.fillText(line, 1700, y);
+            const y = 400 + (i - (lines.length - 1) / 2) * (fontSize * 1.05);
+            // 繪製於畫布右側，保留少量邊距以貼合外展後的投影
+            ctx.fillText(line, 1750, y);
         });
         this.img.src = cvs.toDataURL();
     },
