@@ -5,182 +5,157 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>地鐵隱藏留言 App</title>
     <style>
-        :root { --accent-color: #ff0000; }
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
-
-        .app-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-
-        /* 影片視窗 */
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; }
-        video#train-video { width: 100%; height: 100%; object-fit: cover; }
-
-        /* 1. 物理透視層 (Stage) */
-        .perspective-stage {
-            position: absolute;
-            top: 25%; /* 對齊綠板高度 */
-            left: 0;
-            width: 100%;
-            height: 35%;
-            z-index: 10;
-            perspective: 1200px;
-            pointer-events: none;
+        body {
+            margin: 0;
+            background: #1a1a1a;
+            font-family: "Microsoft JhengHei", sans-serif;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            height: 100vh;
+            color: white;
+            overflow: hidden;
         }
 
-        /* 2. 梯形變形容器 (Trapezoid Board) */
-        /* 這裡模擬將橫條圖貼在牆上的角度 */
-        .trapezoid-board {
+        .container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 9 / 16;
+            background: #000;
+            overflow: hidden;
+        }
+
+        video#bg-video {
+            position: absolute;
             width: 100%;
             height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        /* 物理貼合層：負責處理梯形透視 */
+        .perspective-layer {
+            position: absolute;
+            top: 28%; /* 調整至綠板高度 */
+            left: 0;
+            width: 100%;
+            height: 30%;
+            z-index: 5;
+            perspective: 1000px; /* 建立 3D 深度 */
             display: flex;
             align-items: center;
             justify-content: center;
-            /* 調整這些參數來精確對齊綠板 */
-            transform: rotateY(-48deg) skewY(-7.5deg) translateX(40px);
+            pointer-events: none;
+        }
+
+        /* 梯形面板：這就是你說的「依照綠板外型做變形」 */
+        .trapezoid-board {
+            width: 90%;
+            display: flex;
+            justify-content: center;
+            /* 調整以下參數以對齊綠板邊緣 */
+            /* rotateY: 牆面深度, skewY: 平行修正 */
+            transform: rotateY(-45deg) skewY(-7deg) translateX(30px);
             transform-origin: center right;
             
-            /* 3. 遮罩移除機制 (Mask) */
-            /* 遮罩會隨火車移動從 100% (全遮) 變為 0% (全開) */
+            /* 核心遮罩：一開始由左往右遮住 (100%) */
+            /* 隨著火車開走，這份 inset 會縮減，讓圖顯現出來 */
             clip-path: inset(0 0 0 100%); 
         }
 
-        /* 文字橫條圖樣式 */
-        #text-canvas-image {
-            max-width: 90%;
-            height: auto;
-            /* 模擬噴漆質感 */
-            filter: blur(0.5px) drop-shadow(4px 4px 8px rgba(0,0,0,0.6));
-            opacity: 0.95;
+        .text-strip {
+            color: #ff0000; /* 紅色噴漆感 */
+            font-size: 3.5rem;
+            font-weight: 900;
+            white-space: nowrap;
+            letter-spacing: 2px;
+            /* 增加環境融合感 */
+            filter: blur(0.5px) drop-shadow(2px 2px 4px rgba(0,0,0,0.5));
+            opacity: 0.9;
         }
 
-        /* App UI 介面 */
-        .ui-panel {
-            background: rgba(15, 15, 15, 1);
-            padding: 15px 20px;
-            display: flex;
-            gap: 10px;
-            z-index: 100;
-            border-top: 1px solid #333;
-        }
-
-        input#msg-input {
-            flex: 1;
+        .controls {
+            padding: 20px;
+            width: 100%;
+            max-width: 500px;
             background: #222;
-            border: 1px solid #444;
-            color: #fff;
-            padding: 12px 18px;
-            border-radius: 25px;
-            font-size: 16px;
-            outline: none;
+            z-index: 10;
         }
 
-        button#play-btn {
-            background: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 10px 25px;
-            border-radius: 25px;
-            font-weight: bold;
-            cursor: pointer;
+        textarea {
+            width: 100%; height: 50px; background: #333; border: 1px solid #444;
+            color: white; padding: 10px; border-radius: 8px; resize: none; margin-bottom: 10px;
+        }
+
+        button {
+            width: 100%; padding: 12px; background: #4CAF50; border: none;
+            color: white; border-radius: 8px; cursor: pointer; font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-<div class="app-container">
-    <div class="viewport">
-        <video id="train-video" playsinline muted>
+    <div class="container">
+        <video id="bg-video" playsinline muted>
             <source src="Train.mov" type="video/quicktime">
             <source src="Train.mov" type="video/mp4">
         </video>
 
-        <div class="perspective-stage">
-            <div id="reveal-gate" class="trapezoid-board">
-                <img id="text-canvas-image" alt="message-strip">
+        <div class="perspective-layer">
+            <div id="mask-gate" class="trapezoid-board">
+                <div id="wall-text" class="text-strip">白六愛媽媽</div>
             </div>
         </div>
     </div>
 
-    <div class="ui-panel">
-        <input type="text" id="msg-input" placeholder="想說什麼？" value="白六愛媽媽">
-        <button id="play-btn" onclick="AppModule.execute()">播放</button>
+    <div class="controls">
+        <textarea id="userInput" placeholder="輸入文字..."></textarea>
+        <button onclick="playApp()">播放 App 效果</button>
     </div>
-</div>
 
-<canvas id="hidden-canvas" style="display:none;"></canvas>
+    <script>
+        const video = document.getElementById('bg-video');
+        const maskGate = document.getElementById('mask-gate');
+        const wallText = document.getElementById('wall-text');
+        const input = document.getElementById('userInput');
 
-<script>
-/**
- * 留言板物理揭曉模組
- */
-const AppModule = {
-    config: {
-        revealStart: 3.51, // 火車尾開始露出的時間
-        revealEnd: 5.0,    // 火車完全開走的時間
-        textColor: '#ff0000',
-        fontSize: 120
-    },
+        function playApp() {
+            const msg = input.value.trim() || "白六愛媽媽";
+            wallText.innerText = msg;
 
-    // 1. 將文字轉換成橫條圖 (Canvas to Image)
-    createTextStrip: function(text) {
-        const canvas = document.getElementById('hidden-canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // 根據文字長度計算畫布寬度
-        ctx.font = `900 ${this.config.fontSize}px "Microsoft JhengHei", sans-serif`;
-        const textMetrics = ctx.measureText(text);
-        canvas.width = textMetrics.width + 100;
-        canvas.height = this.config.fontSize + 60;
+            // 1. 初始化遮罩：完全隱藏 (從左側遮擋 100%)
+            maskGate.style.transition = 'none';
+            maskGate.style.clipPath = 'inset(0 0 0 100%)';
 
-        // 重新繪製文字
-        ctx.font = `900 ${this.config.fontSize}px "Microsoft JhengHei", sans-serif`;
-        ctx.fillStyle = this.config.textColor;
-        ctx.textBaseline = 'middle';
-        ctx.textAlign = 'center';
-        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            video.currentTime = 0;
+            video.play();
 
-        // 輸出成圖片
-        return canvas.toDataURL('image/png');
-    },
+            // 2. 監控時間：3.51s 開始隨著車尾揭曉
+            // 假設車尾在 4.8s 完全離開綠板
+            const startTime = 3.51;
+            const endTime = 4.8;
 
-    // 2. 執行揭曉動畫
-    execute: function() {
-        const inputVal = document.getElementById('msg-input').value;
-        const video = document.getElementById('train-video');
-        const gate = document.getElementById('reveal-gate');
-        const img = document.getElementById('text-canvas-image');
+            const syncReveal = () => {
+                const now = video.currentTime;
 
-        // 更新圖片素材
-        img.src = this.createTextStrip(inputVal);
+                if (now >= startTime && now <= endTime) {
+                    // 計算百分比 (0 到 1)
+                    const progress = (now - startTime) / (endTime - startTime);
+                    // 遮罩邊界從 100% 降到 0%
+                    const revealVal = 100 - (progress * 100);
+                    maskGate.style.clipPath = `inset(0 0 0 ${revealVal}%)`;
+                } else if (now > endTime) {
+                    maskGate.style.clipPath = 'inset(0 0 0 0%)';
+                }
 
-        // 重置物理狀態
-        gate.style.transition = 'none';
-        gate.style.clipPath = 'inset(0 0 0 100%)';
-        
-        video.currentTime = 0;
-        video.play();
+                if (!video.paused && !video.ended) {
+                    requestAnimationFrame(syncReveal);
+                }
+            };
 
-        const sync = () => {
-            const now = video.currentTime;
-            
-            // 3. 遮罩隨列車移動揭開
-            if (now >= this.config.revealStart && now <= this.config.revealEnd) {
-                const progress = (now - this.config.revealStart) / (this.config.revealEnd - this.config.revealStart);
-                const revealPercent = 100 - (progress * 100);
-                gate.style.clipPath = `inset(0 0 0 ${revealPercent}%)`;
-            } else if (now > this.config.revealEnd) {
-                gate.style.clipPath = 'inset(0 0 0 0%)';
-            }
-
-            if (!video.paused && !video.ended) {
-                requestAnimationFrame(sync);
-            }
-        };
-        requestAnimationFrame(sync);
-    }
-};
-</script>
+            requestAnimationFrame(syncReveal);
+        }
+    </script>
 </body>
 </html>
