@@ -3,28 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 完美同步版</title>
+    <title>地鐵留言 App - 物理透視增強版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; }
+        
+        .viewport { 
+            position: relative; flex: 1; background: #111; overflow: hidden; 
+            perspective: 2000px; /* 強化場景深度感 */
+        }
+        
         video#bg-video { width: 100%; height: 100%; object-fit: cover; }
 
-        /* 文字變形層 */
-        #warp-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        /* 文字容器：確保 3D 渲染開啟 */
+        #warp-layer { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            z-index: 10; pointer-events: none; 
+            transform-style: preserve-3d;
+        }
+
         #canvas-image { 
-            position: absolute; top: 0; left: 0; width: 800px; height: 300px; 
+            position: absolute; top: 0; left: 0; 
+            width: 800px; height: 300px; /* 畫布原始尺寸 */
             transform-origin: 0 0; 
             clip-path: inset(0 0 0 100%); 
             filter: drop-shadow(2px 2px 10px rgba(0,0,0,0.6));
-            opacity: 0.98;
+            opacity: 0.95;
+            backface-visibility: hidden;
+            will-change: transform, clip-path;
         }
 
-        /* UI 控制列 */
         .ui-bar { background: #1a1a1a; padding: 20px; display: flex; gap: 10px; z-index: 200; border-top: 1px solid #333; }
         input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
         button { background: #e60000; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
-        button:active { background: #b30000; }
     </style>
 </head>
 <body>
@@ -35,12 +46,12 @@
             <source src="Train.mov" type="video/quicktime">
             <source src="Train.mov" type="video/mp4">
         </video>
-        <div id="warp-layer"><img id="canvas-image" alt="Message"></div>
+        <div id="warp-layer"><img id="canvas-image"></div>
     </div>
 
     <div class="ui-bar">
-        <input type="text" id="userInput" value="白六愛媽媽" placeholder="在此輸入留言...">
-        <button onclick="App.play()">執行播放</button>
+        <input type="text" id="userInput" value="白六愛媽媽">
+        <button onclick="App.play()">播放效果</button>
     </div>
 </div>
 
@@ -48,22 +59,19 @@
 
 <script>
 /**
- * 已根據回報參數校準 [cite: 2025-12-19, 2025-12-28]
- * 開始: 1.92s, 結束: 3.11s
+ * 修正透視與速度 [cite: 2025-12-19, 2025-12-28]
  */
 const App = {
-    // 您提供的四點定位座標
     fixedPoints: [
         {x: 0.0720, y: 0.3928}, // 左上
         {x: 0.9413, y: 0.2886}, // 右上
         {x: 0.9200, y: 0.6994}, // 右下
         {x: 0.0613, y: 0.5291}  // 左下
     ],
-    // 同步時間常數
     timing: {
         start: 1.92,
-        end: 3.11,
-        duration: 3.11 - 1.92
+        end: 3.45, // 稍微延長結束時間，避免感覺太快
+        get duration() { return this.end - this.start; }
     },
     video: document.getElementById('bg-video'),
     img: document.getElementById('canvas-image'),
@@ -73,6 +81,7 @@ const App = {
         this.updatePerspective();
     },
 
+    // 強化版矩陣運算，確保 3D 變形生效
     updatePerspective: function() {
         const stage = document.getElementById('stage').getBoundingClientRect();
         const w = 800, h = 300;
@@ -81,12 +90,14 @@ const App = {
             y: pt.y * stage.height
         }));
 
-        const transform = this.getTransform(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        this.img.style.transform = transform;
+        const t = this.calcHomography(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        
+        // 強制套用 matrix3d，這會產生真正的 3D 傾斜感
+        this.img.style.transform = `matrix3d(${t[0]},${t[3]},0,${t[6]},${t[1]},${t[4]},0,${t[7]},0,0,1,0,${t[2]},${t[5]},0,${t[8]})`;
     },
 
     play: function() {
-        this.render(document.getElementById('userInput').value);
+        this.renderText(document.getElementById('userInput').value);
         this.updatePerspective();
         
         this.video.currentTime = 0;
@@ -96,9 +107,11 @@ const App = {
             const now = this.video.currentTime;
             
             if (now >= this.timing.start && now <= this.timing.end) {
-                // 計算 0 ~ 1 的進度
-                const progress = (now - this.timing.start) / this.timing.duration;
-                // 遮罩揭曉：從 100% (右側遮蔽) 到 0% (完全顯示)
+                let progress = (now - this.timing.start) / this.timing.duration;
+                
+                // 速度優化：讓揭曉帶有一點減速感，看起來更自然
+                // progress = Math.sin(progress * Math.PI / 2); 
+                
                 this.img.style.clipPath = `inset(0 0 0 ${100 - (progress * 100)}%)`;
             } else if (now > this.timing.end) {
                 this.img.style.clipPath = 'inset(0 0 0 0%)';
@@ -113,19 +126,21 @@ const App = {
         requestAnimationFrame(syncLoop);
     },
 
-    render: function(text) {
+    renderText: function(text) {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
         cvs.width = 800; cvs.height = 300;
         ctx.clearRect(0, 0, 800, 300);
-        ctx.fillStyle = '#ff0000'; // 鮮紅噴漆感
-        ctx.font = '900 180px sans-serif';
+        ctx.fillStyle = '#ff0000';
+        // 增加字體垂直拉伸感，符合透視視覺
+        ctx.font = '900 200px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(text, 400, 150);
         this.img.src = cvs.toDataURL();
     },
 
-    getTransform: function(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4) {
+    // 核心單應性矩陣運算 (Homography Matrix)
+    calcHomography: function(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4) {
         const adj = (m) => [
             m[4]*m[8]-m[5]*m[7], m[2]*m[7]-m[1]*m[8], m[1]*m[4]-m[2]*m[5],
             m[5]*m[6]-m[3]*m[8], m[0]*m[8]-m[2]*m[6], m[2]*m[3]-m[0]*m[5],
@@ -145,7 +160,7 @@ const App = {
         };
         const t = mult(b2p(px1, py1, px2, py2, px3, py3, px4, py4), adj(b2p(x1, y1, x2, y2, x3, y3, x4, y4)));
         for(let i=0; i<9; i++) t[i] /= t[8];
-        return `matrix3d(${t[0]},${t[3]},0,${t[6]},${t[1]},${t[4]},0,${t[7]},0,0,1,0,${t[2]},${t[5]},0,${t[8]})`;
+        return t;
     }
 };
 
