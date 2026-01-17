@@ -3,33 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 分享模式</title>
+    <title>地鐵留言 App - Pro 分享版</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 1500px; }
+        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 2000px; }
         video#bg-video { width: 100%; height: 100%; object-fit: cover; }
+        
         #warp-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; transform-style: preserve-3d; }
         #canvas-image { 
-            position: absolute; top: 0; left: 0; width: 1200px; height: 600px; 
+            position: absolute; top: 0; left: 0; width: 1600px; height: 600px; 
             transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
-            filter: drop-shadow(4px 4px 15px rgba(0,0,0,0.6)); opacity: 0.95;
+            opacity: 0.92;
+            mix-blend-mode: multiply; /* 讓文字融入背景紋理 */
+            will-change: transform, clip-path;
         }
 
-        /* UI 介面 - 增加分享與顏色功能 */
-        .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; transition: 0.3s; }
-        .row { display: flex; gap: 8px; align-items: center; }
-        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; }
-        button { background: #ff3b30; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        .color-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; }
+        /* UI 介面 */
+        .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 12px; z-index: 200; border-top: 1px solid #333; }
+        .row { display: flex; gap: 10px; align-items: center; }
+        input[type="text"] { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
+        button { background: #ff3b30; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
         
-        /* 隱藏介面模式 */
-        .hidden-ui .ui-bar { display: none; }
+        .color-picker { display: flex; gap: 15px; }
+        .dot { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; transition: 0.2s; }
+        .dot:active { transform: scale(1.2); }
+        
+        /* 分享者看到的介面隱藏 */
+        .shared-mode .ui-bar { display: none !important; }
     </style>
 </head>
-<body class="">
+<body>
 
-<div class="app-container">
+<div class="app-container" id="mainApp">
     <div class="viewport" id="stage">
         <video id="bg-video" playsinline muted loop>
             <source src="Train.mov" type="video/quicktime">
@@ -38,17 +44,19 @@
         <div id="warp-layer"><img id="canvas-image"></div>
     </div>
 
-    <div class="ui-bar" id="uiBar">
+    <div class="ui-bar">
         <div class="row">
-            <input type="text" id="userInput" placeholder="輸入留言...">
-            <button onclick="App.play()">播放效果</button>
+            <input type="text" id="userInput" value="白六愛媽媽女！" placeholder="輸入內容，可用 / 換行">
+            <button onclick="App.play()">執行播放</button>
         </div>
         <div class="row">
-            <div class="color-btn" style="background:#e60000;" onclick="App.setColor('#e60000')"></div>
-            <div class="color-btn" style="background:#ffcc00;" onclick="App.setColor('#ffcc00')"></div>
-            <div class="color-btn" style="background:#ffffff;" onclick="App.setColor('#ffffff')"></div>
-            <div class="color-btn" style="background:#00ff00;" onclick="App.setColor('#00ff00')"></div>
-            <button onclick="App.share()" style="background:#007aff; margin-left: auto;">分享連結</button>
+            <div class="color-picker">
+                <div class="dot" style="background:#e60000;" onclick="App.setColor('#e60000')"></div>
+                <div class="dot" style="background:#ffcc00;" onclick="App.setColor('#ffcc00')"></div>
+                <div class="dot" style="background:#ffffff;" onclick="App.setColor('#ffffff')"></div>
+                <div class="dot" style="background:#00cc44;" onclick="App.setColor('#00cc44')"></div>
+            </div>
+            <button onclick="App.share()" style="background:#007aff; margin-left: auto;">分享連結 (自動隱藏介面)</button>
         </div>
     </div>
 </div>
@@ -56,140 +64,106 @@
 <canvas id="temp-cvs" style="display:none;"></canvas>
 
 <script>
-/**
- * 高度自定義模組 [cite: 2025-12-19, 2025-12-28]
- */
 const App = {
+    // 極致擴張座標
     pts: [
-        {x: 0.0400, y: 0.3800}, // 左上 (再往外拉)
-        {x: 0.9600, y: 0.2800}, // 右上 (再往外拉)
-        {x: 0.9400, y: 0.7200}, // 右下
-        {x: 0.0300, y: 0.5400}  // 左下
+        {x: 0.0200, y: 0.3800}, // 左上
+        {x: 0.9800, y: 0.2600}, // 右上
+        {x: 0.9500, y: 0.7400}, // 右下
+        {x: 0.0100, y: 0.5500}  // 左下
     ],
-    timing: { start: 2.40, end: 3.73 },
-    textColor: '#e60000',
-    
-    video: document.getElementById('bg-video'),
-    img: document.getElementById('canvas-image'),
-    
-    init: function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const sharedText = urlParams.get('msg');
-        const sharedColor = urlParams.get('clr');
-        
-        if (sharedText) {
-            document.body.classList.add('hidden-ui');
-            document.getElementById('userInput').value = decodeURIComponent(sharedText);
-            if (sharedColor) this.textColor = '#' + sharedColor;
-            // 延遲一秒自動播放
-            setTimeout(() => this.play(), 1000);
-        }
+    timing: { start: 2.35, end: 3.73 }, 
+    activeColor: '#e60000',
 
+    init: function() {
+        const params = new URLSearchParams(window.location.search);
+        const msg = params.get('m');
+        if (msg) {
+            document.body.classList.add('shared-mode');
+            document.getElementById('userInput').value = decodeURIComponent(msg);
+            if(params.get('c')) this.activeColor = '#' + params.get('c');
+            setTimeout(() => this.play(), 800);
+        }
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
     },
 
-    setColor: function(c) { this.textColor = c; },
+    setColor: function(c) { this.activeColor = c; },
 
     share: function() {
         const msg = encodeURIComponent(document.getElementById('userInput').value);
-        const clr = this.textColor.replace('#', '');
-        const shareUrl = `${window.location.origin}${window.location.pathname}?msg=${msg}&clr=${clr}`;
-        
-        navigator.clipboard.writeText(shareUrl).then(() => {
-            alert('分享連結已複製！傳送給朋友後，他們將只會看到影片。');
-        });
+        const clr = this.activeColor.replace('#','');
+        const url = `${window.location.origin}${window.location.pathname}?m=${msg}&c=${clr}`;
+        navigator.clipboard.writeText(url).then(() => alert('分享網址已複製！收訊者打開後不會看到按鈕。'));
     },
 
     updateWarp: function() {
-        const rect = document.getElementById('stage').getBoundingClientRect();
-        const w = 1200, h = 600; 
-        const p = this.pts.map(pt => ({ x: pt.x * rect.width, y: pt.y * rect.height }));
+        const r = document.getElementById('stage').getBoundingClientRect();
+        const w = 1600, h = 600;
+        const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
         const m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        this.img.style.transform = `matrix3d(${m.join(',')})`;
+        document.getElementById('canvas-image').style.transform = `matrix3d(${m.join(',')})`;
     },
 
     play: function() {
-        this.renderText(document.getElementById('userInput').value);
+        this.render(document.getElementById('userInput').value);
         this.updateWarp();
-        this.video.currentTime = 0;
-        this.video.play();
+        const v = document.getElementById('bg-video');
+        const img = document.getElementById('canvas-image');
+        v.currentTime = 0; v.play();
 
         const sync = () => {
-            const now = this.video.currentTime;
+            const now = v.currentTime;
             const dur = this.timing.end - this.timing.start;
             if (now >= this.timing.start && now <= this.timing.end) {
-                let progress = (now - this.timing.start) / dur;
-                this.img.style.clipPath = `inset(0 0 0 ${100 - (progress * 100)}%)`;
+                const prog = (now - this.timing.start) / dur;
+                img.style.clipPath = `inset(0 0 0 ${100 - (prog * 100)}%)`;
             } else if (now > this.timing.end) {
-                this.img.style.clipPath = 'inset(0 0 0 0%)';
+                img.style.clipPath = 'inset(0 0 0 0%)';
             } else {
-                this.img.style.clipPath = 'inset(0 0 0 100%)';
+                img.style.clipPath = 'inset(0 0 0 100%)';
             }
-            if (!this.video.paused) requestAnimationFrame(sync);
+            if (!v.paused) requestAnimationFrame(sync);
         };
         requestAnimationFrame(sync);
     },
 
-    renderText: function(text) {
+    render: function(text) {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
-        const w = 1200, h = 600;
-        cvs.width = w; cvs.height = h;
-        ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = this.textColor;
+        cvs.width = 1600; cvs.height = 600;
+        ctx.clearRect(0,0,1600,600);
+        ctx.fillStyle = this.activeColor;
         
-        let fontSize = 280;
-        ctx.font = `900 ${fontSize}px sans-serif`;
-        
-        // 分行邏輯
-        let lines = [];
-        if (text.length > 5) {
-            lines.push(text.slice(0, Math.ceil(text.length / 2)));
-            lines.push(text.slice(Math.ceil(text.length / 2)));
-            fontSize = 180;
-        } else {
-            lines.push(text);
-        }
+        let lines = text.includes('/') ? text.split('/') : (text.length > 5 ? [text.slice(0, Math.ceil(text.length/2)), text.slice(Math.ceil(text.length/2))] : [text]);
+        let fSize = lines.length > 1 ? 180 : 280;
+        ctx.font = `900 ${fSize}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
-        ctx.font = `900 ${fontSize}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        lines.forEach((line, i) => {
-            const y = (h / 2) + (i - (lines.length - 1) / 2) * (fontSize * 1.1);
-            ctx.fillText(line, w / 2, y);
+        lines.forEach((l, i) => {
+            const y = 300 + (i - (lines.length-1)/2) * (fSize * 1.1);
+            ctx.fillText(l.trim(), 800, y);
         });
-        
-        this.img.src = cvs.toDataURL();
+        document.getElementById('canvas-image').src = cvs.toDataURL();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
-        const a = [
-            [x1, y1, 1, 0, 0, 0, -px1*x1, -px1*y1], [0, 0, 0, x1, y1, 1, -py1*x1, -py1*y1],
-            [x2, y2, 1, 0, 0, 0, -px2*x2, -px2*y2], [0, 0, 0, x2, y2, 1, -py2*x2, -py2*y2],
-            [x3, y3, 1, 0, 0, 0, -px3*x3, -px3*y3], [0, 0, 0, x3, y3, 1, -py3*x3, -py3*y3],
-            [x4, y4, 1, 0, 0, 0, -px4*x4, -px4*y4], [0, 0, 0, x4, y4, 1, -py4*x4, -py4*y4]
-        ];
-        const b = [px1, py1, px2, py2, px3, py3, px4, py4];
-        const n = 8;
-        for (let i=0; i<n; i++) {
-            let max = i;
-            for (let j=i+1; j<n; j++) if (Math.abs(a[j][i]) > Math.abs(a[max][i])) max = j;
-            [a[i], a[max]] = [a[max], a[i]]; [b[i], b[max]] = [b[max], b[i]];
-            for (let j=i+1; j<n; j++) {
-                const f = a[j][i] / a[i][i];
-                b[j] -= f * b[i];
-                for (let k=i; k<n; k++) a[j][k] -= f * a[i][k];
+        const a = [[x1,y1,1,0,0,0,-px1*x1,-px1*y1],[0,0,0,x1,y1,1,-py1*x1,-py1*y1],[x2,y2,1,0,0,0,-px2*x2,-px2*y2],[0,0,0,x2,y2,1,-py2*x2,-py2*y2],[x3,y3,1,0,0,0,-px3*x3,-px3*y3],[0,0,0,x3,y3,1,-py3*x3,-py3*y3],[x4,y4,1,0,0,0,-px4*x4,-px4*y4],[0,0,0,x4,y4,1,-py4*x4,-py4*y4]];
+        const b = [px1,py1,px2,py2,px3,py3,px4,py4];
+        for(let i=0;i<8;i++){
+            let m=i; for(let j=i+1;j<8;j++) if(Math.abs(a[j][i])>Math.abs(a[m][i])) m=j;
+            [a[i],a[m]]=[a[m],a[i]]; [b[i],b[m]]=[b[m],b[i]];
+            for(let j=i+1;j<8;j++){
+                let f=a[j][i]/a[i][i]; b[j]-=f*b[i];
+                for(let k=i;k<8;k++) a[j][k]-=f*a[i][k];
             }
         }
-        const x = new Array(8);
-        for (let i=n-1; i>=0; i--) {
-            let s = 0;
-            for (let j=i+1; j<n; j++) s += a[i][j] * x[j];
-            x[i] = (b[i] - s) / a[i][i];
+        const x=new Array(8);
+        for(let i=7;i>=0;i--){
+            let s=0; for(let j=i+1;j<8;j++) s+=a[i][j]*x[j];
+            x[i]=(b[i]-s)/a[i][i];
         }
-        return [x[0], x[3], 0, x[6], x[1], x[4], 0, x[7], 0, 0, 1, 0, x[2], x[5], 0, 1];
+        return [x[0],x[3],0,x[6],x[1],x[4],0,x[7],0,0,1,0,x[2],x[5],0,1];
     }
 };
 window.onload = () => App.init();
