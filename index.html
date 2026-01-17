@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 直式錄影版</title>
+    <title>地鐵留言 App - 3D 導出修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -31,8 +31,8 @@
 
 <div id="status-overlay">
     <div style="border: 4px solid #f3f3f3; border-top: 4px solid #34c759; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite;"></div>
-    <h2 style="margin-top:20px;">直式影片錄製中...</h2>
-    <p>請維持視窗開啟</p>
+    <h2 style="margin-top:20px;">同步 3D 透視中...</h2>
+    <p>請勿離開，導出直式 9:16 影片</p>
 </div>
 
 <div class="app-container">
@@ -43,11 +43,11 @@
         <div id="warp-layer"><img id="canvas-image"></div>
     </div>
 
-    <div class="ui-bar" id="uiBar">
+    <div class="ui-bar">
         <div class="row">
-            <input type="text" id="userInput" placeholder="輸入內容..." value="白六愛媽媽">
+            <input type="text" id="userInput" value="白六愛媽媽">
             <button onclick="App.play()">預覽</button>
-            <button class="btn-download" onclick="App.exportVideo()">導出直式影片</button>
+            <button class="btn-download" onclick="App.exportVideo()">導出 3D 影片</button>
         </div>
     </div>
 </div>
@@ -58,8 +58,7 @@
 <script>
 const App = {
     pts: [{x: 0.02, y: 0.38}, {x: 0.98, y: 0.26}, {x: 0.95, y: 0.74}, {x: 0.01, y: 0.55}],
-    // 延後 0.1 秒：2.35 -> 2.45
-    timing: { start: 2.45, end: 3.73 },
+    timing: { start: 2.45, end: 3.73 }, // 已延後 0.1s
     video: document.getElementById('bg-video'),
     img: document.getElementById('canvas-image'),
 
@@ -73,6 +72,7 @@ const App = {
         const w = 1600, h = 600;
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
         const m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        this.currentMatrix = m; // 儲存當前矩陣供錄影使用
         this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
 
@@ -102,7 +102,7 @@ const App = {
         cvs.width = 1600; cvs.height = 600;
         ctx.clearRect(0,0,1600,600);
         ctx.fillStyle = '#e60000';
-        ctx.font = '900 240px sans-serif'; // 再次加大字體
+        ctx.font = '900 240px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(text, 800, 300);
         this.img.src = cvs.toDataURL();
@@ -114,18 +114,17 @@ const App = {
         
         const canvas = document.getElementById('export-cvs');
         const ctx = canvas.getContext('2d');
-        // 修正為直式比例 9:16
         canvas.width = 720; canvas.height = 1280;
         
         const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 12000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 15000000 });
         const chunks = [];
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = 'train_vertical.webm';
+            a.href = url; a.download = 'train_3d_final.webm';
             a.click();
             document.getElementById('status-overlay').style.display = 'none';
         };
@@ -135,10 +134,9 @@ const App = {
         recorder.start();
 
         const drawLoop = () => {
-            if (this.video.paused || this.video.ended) {
-                recorder.stop(); return;
-            }
-            // 畫直式背景 (模擬 object-fit: cover)
+            if (this.video.paused || this.video.ended) { recorder.stop(); return; }
+
+            // 1. 繪製背景影片 (Cover 模式)
             const vRatio = this.video.videoWidth / this.video.videoHeight;
             const cRatio = canvas.width / canvas.height;
             let sx, sy, sw, sh;
@@ -151,19 +149,31 @@ const App = {
             }
             ctx.drawImage(this.video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
             
-            // 同步遮罩
+            // 2. 應用 3D 矩陣到錄影畫布
             const now = this.video.currentTime;
             if (now >= this.timing.start) {
                 const prog = Math.min(1, (now - this.timing.start) / (this.timing.end - this.timing.start));
                 ctx.save();
-                // 限制繪製區域 (由右往左揭開)
+                
+                // 核心修正：在 Canvas 錄影層套用同樣的四點對位變換
+                // 這裡我們需要將 UI 座標換算為錄影畫布座標
+                const r = document.getElementById('stage').getBoundingClientRect();
+                const scaleX = canvas.width / r.width;
+                const scaleY = canvas.height / r.height;
+                
+                // 模擬揭開效果 (遮罩)
                 ctx.beginPath();
                 ctx.rect(canvas.width * (1 - prog), 0, canvas.width, canvas.height);
                 ctx.clip();
-                
-                // 將 3D 變形層畫入 Canvas (此處使用簡化縮放以維持直式對位)
+
+                // 獲取目前的 Matrix 並轉換為 Canvas 2D transform (簡化 3D 效果為 2D 投影)
+                const m = this.currentMatrix;
+                // matrix3d(a, b, c, d, e, f, ...) -> ctx.transform(a, b, e, f, tx, ty)
+                // 為了精準對位，這裡直接將預覽層的渲染內容畫入
                 ctx.globalAlpha = 0.9;
-                ctx.drawImage(this.img, 0, canvas.height * 0.35, canvas.width, canvas.height * 0.3);
+                ctx.setTransform(m[0]*scaleX, m[1]*scaleY, m[4]*scaleX, m[5]*scaleY, m[12]*scaleX, m[13]*scaleY);
+                ctx.drawImage(document.getElementById('temp-cvs'), 0, 0);
+                
                 ctx.restore();
             }
             requestAnimationFrame(drawLoop);
