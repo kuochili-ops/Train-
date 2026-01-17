@@ -3,56 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - Pro 修正版</title>
+    <title>地鐵 3D 渲染工作站</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
-        .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #111; overflow: hidden; perspective: 2000px; }
-        video#v { width: 100%; height: 100%; object-fit: cover; }
+        :root { --bg: #1e1e1e; --accent: #4cd964; --panel: #2d2d2d; }
+        body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: #ccc; font-family: monospace; overflow: hidden; }
+        
+        /* 頂部狀態列 */
+        .status-header { 
+            height: 30px; background: #111; display: flex; align-items: center; 
+            padding: 0 15px; font-size: 12px; border-bottom: 1px solid #333; justify-content: space-between;
+        }
+        .window-controls { display: flex; gap: 8px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
+
+        .main-layout { display: flex; height: calc(100% - 130px); position: relative; }
+        
+        /* 左側參數列 */
+        .side-bar { width: 40px; background: #1a1a1a; border-right: 1px solid #333; display: flex; flex-direction: column; align-items: center; padding-top: 20px; font-size: 10px; color: #666; gap: 10px; }
+
+        /* 主預覽區 */
+        .viewport { 
+            position: relative; flex: 1; background: #000; overflow: hidden; 
+            display: flex; align-items: center; justify-content: center;
+        }
+        video#v { height: 100%; width: auto; max-width: 100%; object-fit: contain; }
         
         #canvas-image { 
-            position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
+            position: absolute; width: 1800px; height: 800px; 
             transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
-            mix-blend-mode: multiply; opacity: 0.95;
+            mix-blend-mode: multiply; opacity: 0.95; pointer-events: none;
         }
 
-        #kuo-end-img {
-            position: absolute; bottom: 80px; right: 25px; width: 130px;
-            z-index: 999; opacity: 0; transition: opacity 0.8s ease; 
-            pointer-events: none;
+        /* 右下角小預覽圖與 Spinner */
+        .mini-preview {
+            position: absolute; bottom: 20px; right: 20px; width: 120px; height: 120px;
+            background: rgba(45,45,45,0.8); border: 1px solid #444; border-radius: 4px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
         }
+        .spinner {
+            width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .mini-logo { width: 60px; filter: invert(1); }
 
-        .ui-bar { background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 200; border-top: 1px solid #333; }
-        .row { display: flex; gap: 8px; }
-        input { flex: 1; background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
-        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
-        .rec-btn { background: #FF3B30; color: #fff; }
+        /* 底部控制列 */
+        .ui-bar { height: 100px; background: var(--panel); padding: 15px; border-top: 1px solid #444; }
+        .row { display: flex; gap: 10px; align-items: center; }
+        input { flex: 1; background: #111; border: 1px solid #555; color: var(--accent); padding: 12px; border-radius: 4px; font-family: monospace; font-size: 16px; }
+        button { padding: 12px 25px; border-radius: 4px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-play { background: #444; color: white; }
+        .btn-rec { background: #FF3B30; color: white; }
 
+        /* 完成提示 (Toast) */
         #status-toast { 
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: #4cd964; color: white; padding: 10px 25px; border-radius: 12px;
-            font-weight: bold; z-index: 2000; opacity: 0; transition: 0.4s ease;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: none;
+            position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+            background: var(--accent); color: #000; padding: 8px 20px; border-radius: 8px;
+            font-weight: bold; z-index: 2000; opacity: 0; transition: 0.4s;
         }
     </style>
 </head>
 <body>
 
+<div class="status-header">
+    <div># Status-overlay | <span style="color: #888;">地鐵 3D 渲染中 · 演出重式 9:16 條件</span></div>
+    <div class="window-controls"><div class="dot"></div><div class="dot"></div><div class="dot" style="background:#ff5f56"></div></div>
+</div>
+
 <div id="status-toast">✅ 錦起完成，開扉已下載！</div>
 
-<div class="app-container">
+<div class="main-layout">
+    <div class="side-bar">
+        <span>7</span><span>8</span><span>9</span><span>14</span><span>16</span><span>23</span><span>26</span><span>22</span>
+    </div>
+    
     <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <div id="warp-layer"><img id="canvas-image"></div>
-        <img id="kuo-end-img" src="IMG_6604.png">
-    </div>
+        
+        <img id="kuo-end-img" src="IMG_6604.png" style="position:absolute; bottom:60px; right:30px; width:130px; opacity:0; transition:0.8s; mix-blend-mode:screen;">
 
-    <div class="ui-bar">
-        <div class="row">
-            <input type="text" id="userInput" value="新年快樂/2026">
-            <button onclick="App.play()">預覽</button>
-            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製影片</button>
+        <div class="mini-preview">
+            <div class="spinner" id="loader"></div>
+            <img src="IMG_6604.png" class="mini-logo">
+            <div style="font-size:9px; border-top:1px solid #555; padding-top:4px;">製作・著作</div>
         </div>
+    </div>
+</div>
+
+<div class="ui-bar">
+    <div class="row">
+        <span style="color:var(--accent)">recorder.onstop :</span>
+        <input type="text" id="userInput" value="新年快樂/2026">
+        <button class="btn-play" onclick="App.play()">PREVIEW</button>
+        <button class="btn-rec" id="recBtn" onclick="App.startCapture()">RENDER VIDEO</button>
     </div>
 </div>
 
@@ -60,16 +104,15 @@
 
 <script>
 const App = {
-    // 擴大區域邊界點
+    // 擴大後的 3D 座標
     pts: [{x: -0.05, y: 0.35}, {x: 1.05, y: 0.22}, {x: 1.05, y: 0.78}, {x: -0.05, y: 0.60}],
     timing: { start: 2.55, end: 3.83 }, 
-    
+
     init: function() {
         this.v = document.getElementById('v');
         this.img = document.getElementById('canvas-image');
         this.logoImg = document.getElementById('kuo-end-img');
-        this.input = document.getElementById('userInput');
-        this.toast = document.getElementById('status-toast');
+        this.loader = document.getElementById('loader');
         
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
@@ -78,7 +121,7 @@ const App = {
 
     updateWarp: function() {
         const r = document.getElementById('stage').getBoundingClientRect();
-        const w = 1800, h = 800; // 解析度提升
+        const w = 1800, h = 800;
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
         this.m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${this.m.join(',')})`;
@@ -93,11 +136,11 @@ const App = {
     renderOffscreenText: function() {
         const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
-        const text = this.input.value;
+        const text = document.getElementById('userInput').value;
         cvs.width = 1800; cvs.height = 800;
         ctx.clearRect(0,0,1800,800);
-        let lines = text.includes('/') ? text.split('/') : [text];
-        let fontSize = lines.length > 1 ? 180 : 280; // 增大字體
+        let lines = text.split('/');
+        let fontSize = lines.length > 1 ? 180 : 280;
         ctx.fillStyle = '#e60000';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = `900 ${fontSize}px sans-serif`;
@@ -111,8 +154,11 @@ const App = {
     animate: function() {
         const cur = this.v.currentTime;
         const dur = this.v.duration || 5.5;
-        this.logoImg.style.opacity = (cur >= dur - 2) ? '1' : '0';
         
+        // Logo 出現邏輯 (結束前 2 秒)
+        this.logoImg.style.opacity = (cur >= dur - 2) ? '1' : '0';
+        this.loader.style.borderColor = (cur >= dur - 2) ? '#4cd964' : 'rgba(255,255,255,0.1)';
+
         const clipDur = this.timing.end - this.timing.start;
         if (cur >= this.timing.start && cur <= this.timing.end) {
             const prog = (cur - this.timing.start) / clipDur;
@@ -125,33 +171,14 @@ const App = {
         requestAnimationFrame(() => this.animate());
     },
 
-    // 像素級去背函式 [cite: 2025-12-28]
-    getProcessedLogo: function() {
-        const c = document.createElement('canvas');
-        const cx = c.getContext('2d');
-        c.width = this.logoImg.naturalWidth;
-        c.height = this.logoImg.naturalHeight;
-        cx.drawImage(this.logoImg, 0, 0);
-        const imgData = cx.getImageData(0, 0, c.width, c.height);
-        const d = imgData.data;
-        for (let i = 0; i < d.length; i += 4) {
-            // 如果 RGB 值都很低 (接近黑色)，則將 Alpha 設為 0
-            if (d[i] < 50 && d[i+1] < 50 && d[i+2] < 50) d[i+3] = 0;
-        }
-        cx.putImageData(imgData, 0, 0);
-        return c;
-    },
-
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
-        btn.innerText = "錄製中..."; btn.disabled = true;
+        btn.innerText = "RECORDING..."; btn.disabled = true;
         this.renderOffscreenText();
-        const processedLogo = this.getProcessedLogo(); // 預先去背
 
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = 720; exportCanvas.height = 1280;
         const eCtx = exportCanvas.getContext('2d');
-        
         const stream = exportCanvas.captureStream(30);
         const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 15000000 });
         const chunks = [];
@@ -161,33 +188,30 @@ const App = {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob); a.download = `Train_3D.webm`; a.click();
-            btn.innerText = "錄製影片"; btn.disabled = false;
-            this.toast.style.opacity = "1";
-            setTimeout(() => this.toast.style.opacity = "0", 3000);
+            btn.innerText = "RENDER VIDEO"; btn.disabled = false;
+            document.getElementById('status-toast').style.opacity = "1";
+            setTimeout(() => document.getElementById('status-toast').style.opacity = "0", 3000);
         };
 
         this.v.currentTime = 0;
         await this.v.play();
         recorder.start();
 
-        // 強制停止邏輯：5.5 秒後必停 [cite: 2025-12-28]
         const startTime = Date.now();
         const renderLoop = () => {
             const elapsed = (Date.now() - startTime) / 1000;
             if (recorder.state === "recording") {
-                eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
+                eCtx.drawImage(this.v, 0, 0, 720, 1280);
                 const cur = this.v.currentTime;
                 
                 if (cur >= this.timing.start) {
                     const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
                     eCtx.save();
                     eCtx.beginPath();
-                    eCtx.rect(exportCanvas.width * (1 - prog), 0, exportCanvas.width, exportCanvas.height);
+                    eCtx.rect(720 * (1 - prog), 0, 720, 1280);
                     eCtx.clip();
                     const r = document.getElementById('stage').getBoundingClientRect();
-                    const sX = exportCanvas.width / r.width;
-                    const sY = exportCanvas.height / r.height;
-                    eCtx.setTransform(this.m[0]*sX, this.m[1]*sY, this.m[4]*sX, this.m[5]*sY, this.m[12]*sX, this.m[13]*sY);
+                    eCtx.setTransform(this.m[0]*(720/r.width), this.m[1]*(1280/r.height), this.m[4]*(720/r.width), this.m[5]*(1280/r.height), this.m[12]*(720/r.width), this.m[13]*(1280/r.height));
                     eCtx.globalAlpha = 0.95;
                     eCtx.drawImage(document.getElementById('temp-cvs'), 0, 0);
                     eCtx.restore();
@@ -195,8 +219,9 @@ const App = {
 
                 if (cur >= (this.v.duration || 5.5) - 2) {
                     eCtx.save();
-                    const logoW = 180; const logoH = logoW * (processedLogo.height / processedLogo.width);
-                    eCtx.drawImage(processedLogo, exportCanvas.width - logoW - 40, exportCanvas.height - logoH - 100, logoW, logoH);
+                    eCtx.globalCompositeOperation = 'screen'; // 強制去背
+                    const lw = 180; const lh = lw * (this.logoImg.naturalHeight / this.logoImg.naturalWidth);
+                    eCtx.drawImage(this.logoImg, 720 - lw - 40, 1280 - lh - 100, lw, lh);
                     eCtx.restore();
                 }
                 
