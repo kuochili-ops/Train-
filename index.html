@@ -2,128 +2,129 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>白六留言板 - 物理貼合修正版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>地鐵隱藏留言 App</title>
     <style>
-        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        
-        .phone-container {
-            position: relative;
-            width: 100%;
-            max-width: 400px;
-            aspect-ratio: 9 / 19.5;
-            background: #111;
-        }
+        :root { --primary-red: #ff0000; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
 
-        video#train-video {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-        }
+        .app-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
 
-        /* 牆面透視層：這是文字「貼」住的地方，座標絕對固定 */
-        .wall-surface {
+        /* 影片展示區 */
+        .viewport { position: relative; flex: 1; overflow: hidden; }
+        video#train-video { width: 100%; height: 100%; object-fit: cover; }
+
+        /* 物理層：文字座標在此絕對靜止 */
+        .physics-layer {
             position: absolute;
-            top: 24%; /* 調整至綠板中心高度 */
-            left: 5%;
-            width: 90%;
+            top: 22%; /* 根據綠板高度調整 */
+            left: 0;
+            width: 100%;
             height: 40%;
-            z-index: 2;
+            z-index: 10;
+            perspective: 1000px;
+            pointer-events: none;
             display: flex;
             align-items: center;
             justify-content: center;
-            
-            /* 強透視調整：讓文字右側大、左側小，並與綠板邊緣平行 */
-            transform: perspective(1000px) rotateY(-48deg) skewY(-7deg);
-            transform-origin: right center;
-            pointer-events: none;
-
-            /* 核心：物理遮罩。inset(上 右 下 左) */
-            /* 初始狀態：左邊界為 100%，表示完全遮住文字 */
-            clip-path: inset(0 0 0 100%);
         }
 
-        .static-text {
-            color: #ff0000; /* 配合您最新截圖的紅色 */
-            font-size: 5rem; /* 放大文字以填滿綠板 */
+        /* 梯形變形板：模擬綠板透視 */
+        .trapezoid-mask {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* 關鍵：調整 rotateY 與 skewY 達成右大左小的梯形 */
+            transform: rotateY(-48deg) skewY(-7.5deg) translateX(40px);
+            transform-origin: center right;
+            /* 遮罩機制：原本就貼在牆上，只是被遮住 */
+            clip-path: inset(0 0 0 100%); 
+        }
+
+        .wall-text {
+            color: var(--primary-red);
+            font-size: 5rem;
             font-weight: 900;
             white-space: nowrap;
-            /* 模擬噴漆質感：輕微模糊與環境光混合 */
-            filter: blur(0.5px) drop-shadow(2px 2px 5px rgba(0,0,0,0.4));
-            font-family: "Microsoft JhengHei", sans-serif;
+            letter-spacing: 5px;
+            /* 模擬牆面噴漆質感 */
+            filter: blur(0.5px) drop-shadow(4px 4px 8px rgba(0,0,0,0.6));
+            opacity: 0.95;
         }
 
         /* 輸入介面 */
-        .ui-panel {
-            position: absolute;
-            bottom: 20px;
-            width: 90%;
-            left: 5%;
-            z-index: 10;
+        .input-bar {
+            background: rgba(20, 20, 20, 0.95);
+            padding: 15px;
             display: flex;
             gap: 10px;
+            backdrop-filter: blur(10px);
         }
+
+        input { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 20px; outline: none; }
+        button { background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div class="phone-container">
-    <video id="train-video" playsinline>
-        <source src="Train.mov" type="video/quicktime">
-        <source src="Train.mov" type="video/mp4">
-    </video>
+<div class="app-container">
+    <div class="viewport">
+        <video id="train-video" playsinline muted>
+            <source src="Train.mov" type="video/quicktime">
+            <source src="Train.mov" type="video/mp4">
+        </video>
 
-    <div id="mask-gate" class="wall-surface">
-        <div id="target-text" class="static-text">白六愛媽媽</div>
+        <div class="physics-layer">
+            <div id="reveal-gate" class="trapezoid-mask">
+                <div id="target-message" class="wall-text">白六愛媽媽</div>
+            </div>
+        </div>
     </div>
 
-    <div class="ui-panel">
-        <input type="text" id="userInput" style="flex:1; border-radius:20px; padding:10px;" value="白六愛媽媽">
-        <button onclick="startReveal()" style="border-radius:20px; padding:10px 20px;">播放</button>
+    <div class="input-bar">
+        <input type="text" id="userInput" placeholder="輸入留言..." value="白六愛媽媽">
+        <button onclick="executeReveal()">播放</button>
     </div>
 </div>
 
 <script>
-    const video = document.getElementById('train-video');
-    const gate = document.getElementById('mask-gate');
-    const text = document.getElementById('target-text');
-
-    function startReveal() {
-        text.innerText = document.getElementById('userInput').value;
+    // 封裝成留言板模組 (Module Concept)
+    const MetroBoard = {
+        config: { start: 3.51, end: 5.0 },
         
-        // 重置狀態
-        gate.style.transition = 'none';
-        gate.style.clipPath = 'inset(0 0 0 100%)';
-        
-        video.currentTime = 0;
-        video.play();
-
-        // 根據您的錄影時間點微調：
-        // 3.51s 列車尾部開始露出綠色區域
-        // 4.90s 列車完全離開畫面
-        const start = 3.51;
-        const end = 4.9;
-
-        const update = () => {
-            const now = video.currentTime;
+        run: function(msg) {
+            const video = document.getElementById('train-video');
+            const gate = document.getElementById('reveal-gate');
+            const text = document.getElementById('target-message');
             
-            if (now >= start && now <= end) {
-                // 計算揭曉進度 (0 到 1)
-                const progress = (now - start) / (end - start);
-                // 遮罩的左邊界（第4個參數）從 100% 變為 0%
-                const revealLeft = 100 - (progress * 100);
-                gate.style.clipPath = `inset(0 0 0 ${revealLeft}%)`;
-            } else if (now > end) {
-                gate.style.clipPath = 'inset(0 0 0 0%)';
-            }
+            text.innerText = msg;
+            gate.style.transition = 'none';
+            gate.style.clipPath = 'inset(0 0 0 100%)'; // 重置為完全遮擋
+            
+            video.currentTime = 0;
+            video.play();
 
-            if (!video.paused && !video.ended) {
-                requestAnimationFrame(update);
-            }
-        };
+            const sync = () => {
+                const now = video.currentTime;
+                if (now >= this.config.start && now <= this.config.end) {
+                    const p = (now - this.config.start) / (this.config.end - this.config.start);
+                    // 遮罩邊界從 100% 縮減到 0% (原地揭曉)
+                    gate.style.clipPath = `inset(0 0 0 ${100 - (p * 100)}%)`;
+                } else if (now > this.config.end) {
+                    gate.style.clipPath = 'inset(0 0 0 0%)';
+                }
 
-        requestAnimationFrame(update);
+                if (!video.paused && !video.ended) requestAnimationFrame(sync);
+            };
+            requestAnimationFrame(sync);
+        }
+    };
+
+    function executeReveal() {
+        const val = document.getElementById('userInput').value;
+        MetroBoard.run(val);
     }
 </script>
 </body>
