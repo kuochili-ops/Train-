@@ -3,18 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>地鐵透視留言板</title>
+    <title>白六留言板 - 物理貼合版</title>
     <style>
         body {
             margin: 0;
             background: #000;
-            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
             display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
+            align-items: center;
             height: 100vh;
-            overflow: hidden;
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
         }
 
         .phone-mockup {
@@ -24,7 +22,6 @@
             aspect-ratio: 9 / 19.5;
             background: #111;
             overflow: hidden;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
         }
 
         video#train-video {
@@ -35,135 +32,154 @@
             z-index: 1;
         }
 
-        /* 文字容器：處理梯形透視 */
-        .perspective-container {
+        /* 文字容器：定位於綠色板子的區域 */
+        .wall-overlay {
             position: absolute;
-            top: 28%; /* 根據截圖中綠板的高度位置調整 */
-            right: 10%;
-            width: 60%;
-            height: 20%;
+            top: 28%; /* 根據影片綠板高度調整 */
+            left: 0;
+            width: 100%;
+            height: 30%;
             z-index: 2;
-            /* 建立透視點 */
-            perspective: 600px;
+            /* 建立強大的 3D 透視感 */
+            perspective: 1000px;
             pointer-events: none;
         }
 
-        /* 實際文字內容：套用旋轉達成梯形變形 */
-        .perspective-content {
+        /* 梯形變形板：這是關鍵，模擬綠板的物理傾斜 */
+        .trapezoid-surface {
             width: 100%;
             height: 100%;
             display: flex;
             align-items: center;
-            justify-content: flex-end;
-            color: white;
-            font-size: 2.2rem;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            justify-content: center;
             
-            /* 核心：Y軸旋轉產生近大遠小的梯形效果 */
-            transform: rotateY(-25deg) rotateX(2deg);
-            transform-style: preserve-3d;
+            /* 調整這些數值直到文字看起來平行於軌道與天花板的線條 */
+            /* rotateY: 牆面深度, rotateX: 牆面傾斜, skewY: 修正透視歪斜 */
+            transform: rotateY(-40deg) skewY(-5deg) translateX(20px);
+            transform-origin: center right;
             
-            /* 初始狀態：寬度為0，用來模擬被火車遮住的感覺 */
-            overflow: hidden;
-            width: 0%;
-            white-space: nowrap;
-            border-right: 0px solid transparent; /* 隱形邊界 */
+            /* 初始狀態：使用矩形遮罩完全擋住文字（Inset 的右側為 100%） */
+            /* 隨著車子往左開，我們要讓遮罩的左側邊界往右移動 (Reveal from left to right) */
+            clip-path: inset(0 0 0 100%); 
         }
 
-        /* 輸入區域 */
-        .input-panel {
+        .fixed-text {
+            color: rgba(255, 255, 255, 0.85); /* 稍微透明點更像印上去的 */
+            font-size: 2.5rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            white-space: nowrap;
+            /* 增加一點點模糊，模擬攝影機對焦在遠處牆面 */
+            filter: blur(0.5px) drop-shadow(2px 2px 2px rgba(0,0,0,0.3));
+        }
+
+        /* UI 層 */
+        .ui-layer {
             position: absolute;
             bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 85%;
-            z-index: 10;
+            width: 100%;
             display: flex;
-            background: rgba(0,0,0,0.6);
-            padding: 8px;
-            border-radius: 25px;
-            backdrop-filter: blur(5px);
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .input-group {
+            display: flex;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(15px);
+            padding: 8px 15px;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+            width: 80%;
         }
 
         input {
             flex: 1;
-            padding: 10px 15px;
-            border-radius: 20px;
-            border: none;
             background: transparent;
+            border: none;
             color: white;
             outline: none;
+            font-size: 1rem;
         }
 
         button {
+            background: #fff;
+            color: #000;
+            border: none;
             padding: 8px 20px;
             border-radius: 20px;
-            border: none;
-            background: #4CAF50;
-            color: white;
-            cursor: pointer;
             font-weight: bold;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
 
-    <div class="phone-mockup">
-        <video id="train-video" playsinline>
-            <source src="Train.mov" type="video/quicktime">
-            <source src="Train.mov" type="video/mp4">
-        </video>
+<div class="phone-mockup">
+    <video id="train-video" playsinline>
+        <source src="Train.mov" type="video/quicktime">
+        <source src="Train.mov" type="video/mp4">
+    </video>
 
-        <div class="perspective-container">
-            <div id="reveal-text" class="perspective-content">
-                </div>
-        </div>
-
-        <div class="input-panel">
-            <input type="text" id="userMsg" placeholder="輸入留言..." value="白六愛媽媽">
-            <button onclick="revealMessage()">播放</button>
+    <div class="wall-overlay">
+        <div id="mask-gate" class="trapezoid-surface">
+            <div id="final-text" class="fixed-text">白六愛媽媽</div>
         </div>
     </div>
 
-    <script>
-        const video = document.getElementById('train-video');
-        const revealDiv = document.getElementById('reveal-text');
-        const input = document.getElementById('userMsg');
+    <div class="ui-layer">
+        <div class="input-group">
+            <input type="text" id="userInput" value="白六愛媽媽">
+            <button onclick="runReveal()">播放</button>
+        </div>
+    </div>
+</div>
 
-        function revealMessage() {
-            const msg = input.value || "白六愛媽媽";
-            
-            // 1. 初始化狀態
-            revealDiv.innerText = msg;
-            revealDiv.style.width = "0%"; // 先藏起來
-            revealDiv.style.transition = "none";
-            video.currentTime = 0;
-            video.play();
+<script>
+    const video = document.getElementById('train-video');
+    const maskGate = document.getElementById('mask-gate');
+    const finalText = document.getElementById('final-text');
+    const input = document.getElementById('userInput');
 
-            // 2. 監控火車駛離 (3.51秒開始)
-            // 我們讓 width 隨著時間增加，模擬「遮蔽物移開」
-            const startTime = 3.51;
-            const duration = 1.49; // 假設 5 秒時完全移開 (5 - 3.51)
+    function runReveal() {
+        // 更新文字
+        finalText.innerText = input.value;
+        
+        // 重置狀態：遮罩設為 100% (完全遮住)
+        maskGate.style.transition = 'none';
+        maskGate.style.clipPath = 'inset(0 0 0 100%)';
+        
+        video.currentTime = 0;
+        video.play();
 
-            const updateReveal = () => {
-                if (video.currentTime >= startTime) {
-                    // 計算露出百分比 (0% 到 100%)
-                    let progress = (video.currentTime - startTime) / duration;
-                    if (progress > 1) progress = 1;
-                    
-                    revealDiv.style.width = (progress * 100) + "%";
-                }
+        // 關鍵時間點設定 (依據你的影片觀察)
+        const revealStart = 3.51; // 列車尾部開始露出綠板
+        const revealEnd = 5.0;    // 列車完全駛離畫面
+
+        const updateLoop = () => {
+            const now = video.currentTime;
+
+            if (now >= revealStart && now <= revealEnd) {
+                // 計算進度 (從 0 到 1)
+                const progress = (now - revealStart) / (revealEnd - revealStart);
                 
-                if (video.currentTime < 5) {
-                    requestAnimationFrame(updateReveal);
-                } else {
-                    revealDiv.style.width = "100%";
-                }
-            };
+                // 遮罩從 100% 減少到 0%
+                // 注意：這裡的進度是讓 clip-path 的左邊界(left) 向右推移，
+                // 或者更簡單：讓 inset 的左側百分比根據進度變化
+                const revealPercent = 100 - (progress * 100);
+                maskGate.style.clipPath = `inset(0 0 0 ${revealPercent}%)`;
+            } else if (now > revealEnd) {
+                maskGate.style.clipPath = 'inset(0 0 0 0%)';
+            }
 
-            requestAnimationFrame(updateReveal);
-        }
-    </script>
+            if (!video.paused && !video.ended) {
+                requestAnimationFrame(updateLoop);
+            }
+        };
+
+        requestAnimationFrame(updateLoop);
+    }
+</script>
+
 </body>
 </html>
