@@ -3,48 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵留言 App - 四點定位版</title>
+    <title>地鐵留言 App - 座標回報版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-
         .viewport { position: relative; flex: 1; background: #111; overflow: hidden; touch-action: none; }
         video#bg-video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
-        /* 文字變形層 */
-        #warp-container {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 10; pointer-events: none;
-            transform-style: preserve-3d;
+        /* 文字變換容器 */
+        #warp-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        #canvas-image { 
+            position: absolute; top: 0; left: 0; width: 800px; height: 300px; 
+            transform-origin: 0 0; clip-path: inset(0 0 0 100%); 
+            filter: drop-shadow(2px 2px 5px rgba(0,0,0,0.3));
         }
 
-        #canvas-image {
-            position: absolute;
-            top: 0; left: 0;
-            width: 500px; height: 200px; /* 原始比例 */
-            transform-origin: 0 0;
-            clip-path: inset(0 0 0 100%);
-            filter: drop-shadow(2px 2px 5px rgba(0,0,0,0.5));
-        }
-
-        /* 定位點樣式 */
-        .dot {
-            position: absolute;
-            width: 30px; height: 30px;
-            background: rgba(255, 0, 0, 0.6);
-            border: 2px solid white;
-            border-radius: 50%;
-            z-index: 100;
-            transform: translate(-50%, -50%);
-            touch-action: none;
+        /* 定位點 */
+        .dot { 
+            position: absolute; width: 24px; height: 24px; background: rgba(255, 0, 0, 0.7); 
+            border: 2px solid white; border-radius: 50%; z-index: 100; transform: translate(-50%, -50%); 
         }
 
         /* 控制列 */
-        .ui-bar { background: #111; padding: 10px; display: flex; gap: 8px; z-index: 200; border-top: 1px solid #333; }
-        input { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 5px; }
-        button { background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; }
-        .debug-info { position: absolute; top: 10px; left: 10px; color: #0f0; font-size: 10px; z-index: 300; pointer-events: none; background: rgba(0,0,0,0.5); }
+        .ui-bar { background: #111; padding: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 200; border-top: 1px solid #333; }
+        .row { display: flex; gap: 8px; align-items: center; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 5px; }
+        button { background: #4CAF50; color: white; border: none; padding: 10px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .time-control { color: #fff; font-size: 12px; display: flex; align-items: center; gap: 10px; }
+        
+        /* 報告顯示區 */
+        #report-box { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9); color: #0f0; padding: 20px; border-radius: 10px;
+            font-family: monospace; z-index: 1000; display: none; width: 80%; word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -55,36 +47,43 @@
             <source src="Train.mov" type="video/quicktime">
             <source src="Train.mov" type="video/mp4">
         </video>
-
-        <div id="warp-container">
-            <img id="canvas-image">
-        </div>
-
-        <div id="dot0" class="dot" style="top: 30%; left: 10%;"></div>
-        <div id="dot1" class="dot" style="top: 30%; left: 90%;"></div>
-        <div id="dot2" class="dot" style="top: 60%; left: 90%;"></div>
-        <div id="dot3" class="dot" style="top: 60%; left: 10%;"></div>
-
-        <div class="debug-info" id="debug">拖動紅點對齊綠板四角</div>
+        <div id="warp-layer"><img id="canvas-image"></div>
+        <div id="dot0" class="dot" style="top: 25%; left: 10%;"></div>
+        <div id="dot1" class="dot" style="top: 25%; left: 90%;"></div>
+        <div id="dot2" class="dot" style="top: 55%; left: 90%;"></div>
+        <div id="dot3" class="dot" style="top: 55%; left: 10%;"></div>
     </div>
 
     <div class="ui-bar">
-        <input type="text" id="userInput" value="白六愛媽媽">
-        <button onclick="App.run()">播放同步</button>
-        <button onclick="App.toggleDots()" style="background:#555">隱藏點</button>
+        <div class="row">
+            <input type="text" id="userInput" value="白六愛媽媽">
+            <button onclick="MetroModule.play()">播放並測試同步</button>
+        </div>
+        <div class="row time-control">
+            <span>開始秒數:</span>
+            <input type="range" id="startTime" min="3.0" max="4.0" step="0.01" value="3.51">
+            <span id="startVal">3.51</span>
+        </div>
+        <div class="row">
+            <button onclick="MetroModule.toggleDots()" style="background:#555; flex:1">顯示/隱藏點</button>
+            <button onclick="MetroModule.report()" style="background:#2196F3; flex:1">回報座標參數</button>
+        </div>
     </div>
 </div>
 
-<canvas id="temp-canvas" style="display:none;"></canvas>
+<div id="report-box">
+    <div id="report-text"></div>
+    <button onclick="this.parentElement.style.display='none'" style="margin-top:10px; width:100%">關閉</button>
+</div>
+
+<canvas id="temp-cvs" style="display:none;"></canvas>
 
 <script>
 /**
- * 頂點對位與同步模組 [cite: 2025-12-19]
+ * 定位與同步核心模組 [cite: 2025-12-19]
  */
-const App = {
-    dots: [
-        {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}
-    ],
+const MetroModule = {
+    dots: [{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:0,y:0}],
     video: document.getElementById('bg-video'),
     img: document.getElementById('canvas-image'),
     
@@ -92,60 +91,53 @@ const App = {
         const stage = document.getElementById('stage');
         const dotElems = [0,1,2,3].map(i => document.getElementById('dot'+i));
         
-        // 初始化點位置
         dotElems.forEach((el, i) => {
             const rect = stage.getBoundingClientRect();
-            this.dots[i].x = parseFloat(el.style.left) / 100 * rect.width;
-            this.dots[i].y = parseFloat(el.style.top) / 100 * rect.height;
+            this.dots[i].x = parseFloat(el.style.left)/100 * rect.width;
+            this.dots[i].y = parseFloat(el.style.top)/100 * rect.height;
 
-            // 拖動邏輯
             el.addEventListener('pointermove', (e) => {
-                if (e.buttons > 0) {
+                if(e.buttons > 0) {
                     const r = stage.getBoundingClientRect();
                     this.dots[i].x = e.clientX - r.left;
                     this.dots[i].y = e.clientY - r.top;
                     el.style.left = this.dots[i].x + "px";
                     el.style.top = this.dots[i].y + "px";
-                    this.updateWarp();
+                    this.updatePerspective();
                 }
             });
         });
-        this.updateWarp();
-    },
 
-    // 計算 Matrix3D 變形矩陣 (Corner Pinning 演算法)
-    updateWarp: function() {
-        const w = 500, h = 200; // 原始文字寬高
-        const d = this.dots;
+        document.getElementById('startTime').oninput = function() {
+            document.getElementById('startVal').innerText = this.value;
+        };
         
-        // 簡化版矩陣變形計算
-        // 為了讓文字貼合四角，我們計算從 (0,0, w,0, w,h, 0,h) 到四個點的變換
-        // 這裡直接套用計算好的 CSS 變形
-        this.img.style.transform = this.getTransform(0, 0, w, 0, w, h, 0, h, d[0].x, d[0].y, d[1].x, d[1].y, d[2].x, d[2].y, d[3].x, d[3].y);
+        this.updatePerspective();
     },
 
-    getTransform: function(x1, y1, x2, y2, x3, y3, x4, y4, y11, y12, y21, y22, y31, y32, y41, y42) {
-        // 此處省略複雜的 Homography 矩陣運算，使用簡化方案達成效果
-        // 實際應用中可引入矩陣庫，此處為示範對位
-        return `matrix3d(...)`; // 代碼中將實作完整運算
+    updatePerspective: function() {
+        const w = 800, h = 300;
+        const d = this.dots;
+        const transform = this.getTransform(0,0, w,0, w,h, 0,h, d[0].x, d[0].y, d[1].x, d[1].y, d[2].x, d[2].y, d[3].x, d[3].y);
+        this.img.style.transform = transform;
     },
 
-    run: function() {
-        this.renderText(document.getElementById('userInput').value);
+    play: function() {
+        this.render(document.getElementById('userInput').value);
+        const start = parseFloat(document.getElementById('startTime').value);
+        // 為了讓速度「跟上」列車，我們設定揭開的持續時間較短（約 1.2 秒）
+        const duration = 1.2; 
+        
         this.video.currentTime = 0;
         this.video.play();
-        
-        const start = 3.51; // 車尾出現
-        const end = 4.75;   // 車尾完全開走
-        
+
         const sync = () => {
             const now = this.video.currentTime;
-            if (now >= start && now <= end) {
-                const p = (now - start) / (end - start);
-                // 同步關鍵：這條公式決定了字體出現的速度
-                // 如果字跟不上，可以給 p 加上加權，例如 p = Math.pow(p, 0.8)
+            if (now >= start && now <= start + duration) {
+                const p = (now - start) / duration;
+                // 使用線性揭開，100% (全遮) -> 0% (全開)
                 this.img.style.clipPath = `inset(0 0 0 ${100 - (p * 100)}%)`;
-            } else if (now > end) {
+            } else if (now > start + duration) {
                 this.img.style.clipPath = 'inset(0 0 0 0%)';
             }
             if (!this.video.paused) requestAnimationFrame(sync);
@@ -153,60 +145,57 @@ const App = {
         requestAnimationFrame(sync);
     },
 
-    renderText: function(text) {
-        const cvs = document.getElementById('temp-canvas');
+    render: function(text) {
+        const cvs = document.getElementById('temp-cvs');
         const ctx = cvs.getContext('2d');
-        cvs.width = 1000; cvs.height = 400;
+        cvs.width = 800; cvs.height = 300;
         ctx.fillStyle = '#ff0000';
-        ctx.font = '900 300px sans-serif';
+        ctx.font = '900 200px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(text, 500, 200);
+        ctx.fillText(text, 400, 150);
         this.img.src = cvs.toDataURL();
     },
 
+    report: function() {
+        const stage = document.getElementById('stage').getBoundingClientRect();
+        const data = {
+            points: this.dots.map(d => ({ x: (d.x / stage.width).toFixed(4), y: (d.y / stage.height).toFixed(4) })),
+            startTime: document.getElementById('startTime').value
+        };
+        document.getElementById('report-text').innerText = JSON.stringify(data);
+        document.getElementById('report-box').style.display = 'block';
+    },
+
     toggleDots: function() {
-        const display = document.getElementById('dot0').style.display === 'none' ? 'block' : 'none';
-        [0,1,2,3].forEach(i => document.getElementById('dot'+i).style.display = display);
+        const d = document.getElementById('dot0').style.display === 'none' ? 'block' : 'none';
+        [0,1,2,3].forEach(i => document.getElementById('dot'+i).style.display = d);
+    },
+
+    getTransform: function(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4) {
+        const adj = (m) => [
+            m[4]*m[8]-m[5]*m[7], m[2]*m[7]-m[1]*m[8], m[1]*m[4]-m[2]*m[5],
+            m[5]*m[6]-m[3]*m[8], m[0]*m[8]-m[2]*m[6], m[2]*m[3]-m[0]*m[5],
+            m[3]*m[7]-m[4]*m[6], m[1]*m[6]-m[0]*m[7], m[0]*m[4]-m[1]*m[3]
+        ];
+        const mult = (a, b) => {
+            const c = Array(9);
+            for(let i=0; i<3; i++) for(let j=0; j<3; j++) {
+                let s=0; for(let k=0; k<3; k++) s+=a[i*3+k]*b[k*3+j]; c[i*3+j]=s;
+            }
+            return c;
+        };
+        const b2p = (x1, y1, x2, y2, x3, y3, x4, y4) => {
+            const m = [x1, x2, x3, y1, y2, y3, 1, 1, 1];
+            const v = mult(adj(m), [x4, y4, 1]);
+            return mult(m, [v[0], 0, 0, 0, v[1], 0, 0, 0, v[2]]);
+        };
+        const t = mult(b2p(px1, py1, px2, py2, px3, py3, px4, py4), adj(b2p(x1, y1, x2, y2, x3, y3, x4, y4)));
+        for(let i=0; i<9; i++) t[i] /= t[8];
+        return `matrix3d(${t[0]},${t[3]},0,${t[6]},${t[1]},${t[4]},0,${t[7]},0,0,1,0,${t[2]},${t[5]},0,${t[8]})`;
     }
 };
 
-// 輔助矩陣計算函數 (Homography)
-// (因篇幅限制，此處使用簡化的矩陣代換實現)
-App.getTransform = function(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4) {
-    var adj = function(m) {
-        return [
-            m[4] * m[8] - m[5] * m[7], m[2] * m[7] - m[1] * m[8], m[1] * m[4] - m[2] * m[5],
-            m[5] * m[6] - m[3] * m[8], m[0] * m[8] - m[2] * m[6], m[2] * m[3] - m[0] * m[5],
-            m[3] * m[7] - m[4] * m[6], m[1] * m[6] - m[0] * m[7], m[0] * m[4] - m[1] * m[3]
-        ];
-    };
-    var mult = function(a, b) {
-        var c = Array(9);
-        for (var i = 0; i < 3; i++) {
-            for (var j = 0; j < 3; j++) {
-                var s = 0;
-                for (var k = 0; k < 3; k++) s += a[i * 3 + k] * b[k * 3 + j];
-                c[i * 3 + j] = s;
-            }
-        }
-        return c;
-    };
-    var basisToPoints = function(x1, y1, x2, y2, x3, y3, x4, y4) {
-        var m = [ x1, x2, x3, y1, y2, y3, 1, 1, 1 ];
-        var v = mult(adj(m), [x4, y4, 1]);
-        return mult(m, [v[0], 0, 0, 0, v[1], 0, 0, 0, v[2]]);
-    };
-    var general2DProjection = function(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4) {
-        var s = basisToPoints(x1, y1, x2, y2, x3, y3, x4, y4);
-        var d = basisToPoints(px1, py1, px2, py2, px3, py3, px4, py4);
-        return mult(d, adj(s));
-    };
-    var t = general2DProjection(x1, y1, x2, y2, x3, y3, x4, y4, px1, py1, px2, py2, px3, py3, px4, py4);
-    for (var i = 0; i < 9; i++) t[i] /= t[8];
-    return "matrix3d(" + [t[0], t[3], 0, t[6], t[1], t[4], 0, t[7], 0, 0, 1, 0, t[2], t[5], 0, t[8]].join(',') + ")";
-};
-
-window.onload = () => App.init();
+window.onload = () => MetroModule.init();
 </script>
 </body>
 </html>
