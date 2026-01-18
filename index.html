@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 解決縱切問題版</title>
+    <title>地鐵 3D - 錄影同步修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -50,12 +50,11 @@
 
 <script>
 const App = {
-    // 修正：將左側座標 x 從 0.08 往右移至 0.18，徹底避開列車行進軌跡
+    // 延續避開列車的座標與時間設定
     pts: [
         {x: 0.18, y: 0.36}, {x: 0.94, y: 0.22}, 
         {x: 0.94, y: 0.85}, {x: 0.18, y: 0.58}
     ],
-    // 修正：提早在 4.70 秒消失，確保車頭出現前看板已離場
     timing: { start: 2.55, end: 3.83, hide: 4.70 }, 
 
     init: function() {
@@ -86,7 +85,6 @@ const App = {
         this.ctx.save();
         
         let lines = (txt.length > 7) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
-
         this.ctx.translate(1750, 400); 
         this.ctx.textAlign = 'right';
         this.ctx.textBaseline = 'middle';
@@ -124,7 +122,6 @@ const App = {
 
     animate: function() {
         const t = this.v.currentTime;
-        // 核心邏輯：時間一到立刻切斷顯示
         this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
         this.logo.style.opacity = (t >= 4.8) ? '1' : '0';
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
@@ -135,41 +132,62 @@ const App = {
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
         btn.disabled = true; btn.innerText = "錄製中...";
+        
         const exportCvs = document.createElement('canvas');
-        exportCvs.width = this.v.videoWidth || 720;
-        exportCvs.height = this.v.videoHeight || 1280;
+        // 抓取影片原始寬高
+        const vW = this.v.videoWidth;
+        const vH = this.v.videoHeight;
+        exportCvs.width = vW;
+        exportCvs.height = vH;
         const eCtx = exportCvs.getContext('2d');
+        
         const stream = exportCvs.captureStream(30);
         const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 8000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 12000000 });
         const chunks = [];
+        
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: mime });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Subway_Fix.${mime.split('/')[1]}`; a.click();
+            a.download = `Metro_Export.${mime.split('/')[1]}`; a.click();
             btn.disabled = false; btn.innerText = "穩定錄製導出";
             this.v.loop = true;
         };
-        this.v.loop = false; this.v.currentTime = 0;
+
+        this.v.loop = false;
+        this.v.currentTime = 0;
         await this.v.play();
         recorder.start();
+
         const captureLoop = () => {
             if (recorder.state === "recording") {
                 const t = this.v.currentTime;
-                eCtx.drawImage(this.v, 0, 0, exportCvs.width, exportCvs.height);
-                // 錄製時也嚴格遵守隱藏時間
+                // 1. 畫背景影片
+                eCtx.drawImage(this.v, 0, 0, vW, vH);
+                
+                // 2. 畫文字看板 (修正：確保與預覽座標同步)
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
-                    const s = exportCvs.width / 1800;
+                    // 根據影片原始大小縮放矩陣
+                    const s = vW / 1800; 
+                    // 這裡的轉換必須匹配 calcMatrix 的導出結果
                     eCtx.setTransform(this.m[0]*s, this.m[1]*s, this.m[4]*s, this.m[5]*s, this.m[12]*s, this.m[13]*s);
                     eCtx.drawImage(this.cvs, 0, 0);
                     eCtx.restore();
                 }
-                if (t >= 4.8) eCtx.drawImage(this.logo, exportCvs.width-130, exportCvs.height-130, 100, 100);
-                if (this.v.ended || t > 5.6) recorder.stop();
-                else requestAnimationFrame(captureLoop);
+                
+                // 3. 畫 Logo
+                if (t >= 4.8) {
+                    eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
+                }
+
+                if (this.v.ended || t > 5.6) {
+                    recorder.stop();
+                } else {
+                    requestAnimationFrame(captureLoop);
+                }
             }
         };
         captureLoop();
