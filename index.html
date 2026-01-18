@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 定位點微調與錄影修正版</title>
+    <title>地鐵 3D - 錄影透視對齊修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -23,7 +23,6 @@
         button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
         .rec-btn { background: #E02020; color: white; }
-        .rec-btn:disabled { background: #444; color: #888; }
     </style>
 </head>
 <body>
@@ -84,10 +83,10 @@ const CanvasRecorder = {
 };
 
 const App = {
-    // 修正：pts[3].y 改為 0.63 (往上移動)
+    // 修正：pts[3].y 改為 0.60 (再次上移)
     pts: [
         {x: 0.05, y: 0.36}, {x: 0.94, y: 0.22}, 
-        {x: 0.94, y: 0.78}, {x: 0.05, y: 0.63}
+        {x: 0.94, y: 0.78}, {x: 0.05, y: 0.60}
     ],
     timing: { start: 2.55, end: 3.83, hide: 4.75, stop: 5.50 }, 
     isRecording: false,
@@ -189,9 +188,14 @@ const App = {
                 
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
+                    // 核心修正：將 pts 基於影片原始寬高重新映射
                     const p = this.pts.map(pt => ({ x: pt.x * vW, y: pt.y * vH }));
-                    const mRec = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-                    eCtx.setTransform(mRec[0], mRec[1], mRec[4], mRec[5], mRec[12], mRec[13]);
+                    const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+                    
+                    // 修正 2D Canvas 矩陣順序與 3D 渲染對齊 (a, b, c, d, e, f)
+                    // m[0]=scaleX, m[4]=skewX, m[12]=translateX, m[1]=skewY, m[5]=scaleY, m[13]=translateY
+                    eCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
+                    
                     const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
                     const clipX = 1800 * (1 - prog);
                     eCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
@@ -200,7 +204,7 @@ const App = {
                 if (t >= 4.8) eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
 
                 if (t >= this.timing.stop || this.v.ended) {
-                    await CanvasRecorder.stop("Metro_FlipBoard_Export");
+                    await CanvasRecorder.stop("Metro_Export_Sync");
                     this.isRecording = false;
                     btn.disabled = false;
                     btn.innerText = "穩定錄製導出";
