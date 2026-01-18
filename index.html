@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 文字排版最終修正</title>
+    <title>地鐵 3D - 右對齊修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -39,7 +39,7 @@
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
             底：<input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
             <span>(黑為透明)</span>
-            <input type="text" id="userInput" placeholder="輸入文字 (長文會自動分行)" oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
         </div>
         <div class="btn-row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
@@ -52,7 +52,7 @@
 
 <script>
 const App = {
-    // 修正：左下角點 y 往上移 (0.60 -> 0.52)，右下角 y 保持深透視 (0.75) [cite: 2026-01-18]
+    // 延續先前修正：左下上移 (0.52)，右下深透視 (0.75) [cite: 2026-01-18]
     pts: [
         {x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, 
         {x: 0.94, y: 0.75}, {x: 0.08, y: 0.52}
@@ -87,7 +87,7 @@ const App = {
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
         
-        // 分行邏輯：若字數多於 7 字，嘗試分兩行 [cite: 2026-01-18]
+        // 分行判斷 [cite: 2026-01-18]
         let lines = [];
         if (txt.length > 7) {
             lines.push(txt.substring(0, Math.ceil(txt.length/2)));
@@ -96,25 +96,33 @@ const App = {
             lines.push(txt);
         }
 
-        // 繪製背景 (若選擇黑色則不畫底色 = 透明) [cite: 2026-01-18]
-        if (bgColor !== "#000000") {
-            this.ctx.fillStyle = bgColor + "E6";
-            this.ctx.roundRect(20, 150, 1720, 500, 40);
-            this.ctx.fill();
-        }
-
-        // 文字樣式與拉伸
-        this.ctx.translate(50, 400);
-        this.ctx.textAlign = 'left';
+        // 修正：文字改為右對齊 (textAlign: right) [cite: 2026-01-18]
+        this.ctx.translate(1750, 400); 
+        this.ctx.textAlign = 'right';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillStyle = textColor;
+
+        // 計算背景寬度 (從右側往左延展) [cite: 2026-01-18]
+        if (bgColor !== "#000000") {
+            this.ctx.save();
+            this.ctx.fillStyle = bgColor + "E6";
+            let maxW = 0;
+            this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+            lines.forEach(l => {
+                let w = this.ctx.measureText(l).width * 0.85; // 加上縮放比
+                if(w > maxW) maxW = w;
+            });
+            // 繪製圓角矩形底色
+            this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -220 : -300, maxW + 80, lines.length === 1 ? 440 : 600, 40);
+            this.ctx.fill();
+            this.ctx.restore();
+        }
 
         if (lines.length === 1) {
             this.ctx.scale(0.85, 1.8); 
             this.ctx.font = '900 350px sans-serif';
             this.ctx.fillText(lines[0], 0, 0);
         } else {
-            // 雙行模式：縮小字高以符合看板 [cite: 2026-01-18]
             this.ctx.scale(0.85, 1.1); 
             this.ctx.font = '900 240px sans-serif';
             this.ctx.fillText(lines[0], 0, -120);
@@ -152,7 +160,7 @@ const App = {
             const blob = new Blob(chunks, { type: mime });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Subway_Final.${mime.split('/')[1]}`; a.click();
+            a.download = `Subway_RightAlign.${mime.split('/')[1]}`; a.click();
             btn.disabled = false; btn.innerText = "穩定錄製導出";
             this.v.loop = true;
         };
