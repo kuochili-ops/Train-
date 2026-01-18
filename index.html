@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 穩定合成導出版</title>
+    <title>地鐵 3D - 成功錄影設定版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -25,10 +25,13 @@
         .btn-row { display: flex; gap: 8px; }
         button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
-        .rec-btn { background: #E02020; color: white; }
+        .rec-btn { background: #ff0000; color: white; }
+        #stop-overlay { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); z-index: 500; background: #ff0000; color: white; padding: 10px 20px; border-radius: 50px; display: none; font-weight: bold; }
     </style>
 </head>
 <body>
+
+<div id="stop-overlay">⏹ 錄製中，點擊停止</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
@@ -40,11 +43,11 @@
         <div class="row">
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
             底：<input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
-            <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入新年祝賀..." oninput="App.renderText()">
         </div>
         <div class="btn-row">
             <button class="preview-btn" onclick="App.play()">播放預覽</button>
-            <button class="rec-btn" id="recBtn" onclick="App.startStableCapture()">穩定錄製導出</button>
+            <button class="rec-btn" id="recBtn" onclick="App.startRecording()">● 錄製導出</button>
         </div>
     </div>
 </div>
@@ -52,37 +55,9 @@
 <canvas id="offscreen" style="display:none;"></canvas>
 
 <script>
-/** Canvas 錄製模組 - KUO Flip-board Method **/
-const CanvasRecorder = {
-    recorder: null,
-    chunks: [],
-    start(sourceCanvas, fps = 30) {
-        this.chunks = [];
-        const stream = sourceCanvas.captureStream(fps);
-        // 手機端相容性較好的 mimeType
-        const options = { mimeType: 'video/webm;codecs=vp8' }; 
-        this.recorder = new MediaRecorder(stream, options);
-        this.recorder.ondataavailable = (e) => this.chunks.push(e.data);
-        this.recorder.start();
-    },
-    stop(fileName) {
-        return new Promise((resolve) => {
-            this.recorder.onstop = () => {
-                const blob = new Blob(this.chunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = `${fileName}.webm`; a.click();
-                URL.revokeObjectURL(url);
-                resolve();
-            };
-            this.recorder.stop();
-        });
-    }
-};
-
 const App = {
     pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
-    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35, stop: 5.8 },
+    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35 },
     isRecording: false,
 
     init: function() {
@@ -129,7 +104,6 @@ const App = {
     play: function() { this.v.currentTime = 0; this.v.play(); },
 
     animate: function() {
-        if (this.isRecording) return;
         const t = this.v.currentTime;
         this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
         this.logo.style.opacity = (t >= this.timing.logoStart && t < 5.8) ? '1' : '0';
@@ -138,66 +112,87 @@ const App = {
         requestAnimationFrame(() => this.animate());
     },
 
-    startStableCapture: async function() {
-        if (this.isRecording) return;
-        const btn = document.getElementById('recBtn');
+    // 🛠️ 移植範例的錄影邏輯
+    startRecording: function() {
+        this.isRecording = true;
+        document.getElementById('stop-overlay').style.display = 'block';
         const stage = document.getElementById('stage');
-        this.isRecording = true; 
-        btn.innerText = "錄製導出中..."; btn.disabled = true;
+        const dpr = window.devicePixelRatio || 1;
+        
+        const recCanvas = document.createElement('canvas');
+        recCanvas.width = stage.clientWidth * dpr;
+        recCanvas.height = stage.clientHeight * dpr;
+        const recCtx = recCanvas.getContext('2d');
+        
+        const stream = recCanvas.captureStream(30);
+        this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
+        this.chunks = [];
+        
+        this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
+        this.mediaRecorder.onstop = () => {
+            const b = new Blob(this.chunks, { type: 'video/webm' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'Metro_3D_Export.webm'; a.click();
+            document.getElementById('stop-overlay').style.display = 'none';
+        };
 
-        // 核心修正：將錄影畫布寬高設為跟當前預覽視窗一模一樣
-        const w = stage.clientWidth;
-        const h = stage.clientHeight;
-        const exportCvs = document.createElement('canvas');
-        exportCvs.width = w; exportCvs.height = h;
-        const eCtx = exportCvs.getContext('2d');
-
-        CanvasRecorder.start(exportCvs, 30);
-        this.v.pause(); this.v.currentTime = 0; 
-        await this.v.play();
-
-        const renderFrame = async () => {
+        const draw = () => {
+            if(!this.isRecording) return;
             const t = this.v.currentTime;
-            eCtx.clearRect(0, 0, w, h);
+            const w = recCanvas.width;
+            const h = recCanvas.height;
+
+            // 1. 清空並畫背景影片
+            recCtx.fillStyle = "#000"; recCtx.fillRect(0, 0, w, h);
             
-            // 1. 畫影片背景 (模擬 object-fit: cover)
+            // 模擬 object-fit: cover
             const vRatio = this.v.videoWidth / this.v.videoHeight;
             const sRatio = w / h;
-            let drawW, drawH, drawX, drawY;
-            if (sRatio > vRatio) { drawW = w; drawH = w / vRatio; drawX = 0; drawY = (h - drawH) / 2; }
-            else { drawH = h; drawW = h * vRatio; drawX = (w - drawW) / 2; drawY = 0; }
-            eCtx.drawImage(this.v, drawX, drawY, drawW, drawH);
+            let dW, dH, dX, dY;
+            if (sRatio > vRatio) { dW = w; dH = w / vRatio; dX = 0; dY = (h - dH) / 2; }
+            else { dH = h; dW = h * vRatio; dX = (w - dW) / 2; dY = 0; }
+            recCtx.drawImage(this.v, dX, dY, dW, dH);
 
-            // 2. 畫文字看板 (座標完全同步預覽)
+            // 2. 畫文字看板 (重點修正：確保文字在此層被繪製)
             if (t >= this.timing.start && t < this.timing.hide) {
                 const p = this.pts.map(pt => ({ x: pt.x * w, y: pt.y * h }));
                 const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-                eCtx.save();
-                eCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
+                recCtx.save();
+                recCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
+                
                 const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
                 const clipX = 1800 * (1 - prog);
-                eCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
-                eCtx.restore();
+                // 裁切文字畫布並繪製
+                recCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
+                recCtx.restore();
             }
 
-            // 3. 畫 Logo (座標完全同步預覽)
+            // 3. 畫 Logo (帶淡入效果)
             if (t >= this.timing.logoStart && t < 5.8) {
-                eCtx.save();
-                eCtx.globalAlpha = 1;
-                // 根據預覽時 CSS 的位置 (bottom:30, right:30, width:120) 繪製
-                eCtx.drawImage(this.logo, w - 120 - 30, h - 120 - 30, 120, 120);
-                eCtx.restore();
+                recCtx.save();
+                // Logo 淡入計算
+                const logoAlpha = Math.min(1, (t - this.timing.logoStart) / 1.0);
+                recCtx.globalAlpha = logoAlpha;
+                const logoSize = 120 * dpr;
+                const padding = 30 * dpr;
+                recCtx.drawImage(this.logo, w - logoSize - padding, h - logoSize - padding, logoSize, logoSize);
+                recCtx.restore();
             }
 
-            if (t >= this.timing.stop || this.v.ended) {
-                await CanvasRecorder.stop("Metro_3D_Stabilized");
-                this.isRecording = false; btn.innerText = "穩定錄製導出"; btn.disabled = false;
-                this.v.loop = true; this.animate();
-            } else {
-                requestAnimationFrame(renderFrame);
-            }
+            requestAnimationFrame(draw);
         };
-        renderFrame();
+
+        this.v.currentTime = 0;
+        this.v.play();
+        this.mediaRecorder.start();
+        draw();
+
+        document.getElementById('stop-overlay').onclick = () => {
+            this.isRecording = false;
+            this.mediaRecorder.stop();
+        };
+        
+        // 自動停止設定
+        this.v.onended = () => { if(this.isRecording) document.getElementById('stop-overlay').click(); };
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
