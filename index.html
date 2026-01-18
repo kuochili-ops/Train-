@@ -3,27 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 列車遮罩修復版</title>
+    <title>地鐵 3D 穩定最終版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 2200px; }
-        video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; }
+        video#v { width: 100%; height: 100%; object-fit: cover; }
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2; pointer-events: none;
-            clip-path: inset(0 0 0 100%); 
+            clip-path: inset(0 0 0 100%);
         }
-        #kuo-end-img { position: absolute; bottom: 25px; right: 25px; width: 120px; z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen; }
-        
-        .ui-bar { background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 1000; border-top: 1px solid #333; }
-        .row { display: flex; gap: 10px; align-items: center; color: #fff; font-size: 14px; }
+        #kuo-logo { position: absolute; bottom: 20px; right: 20px; width: 100px; z-index: 9; opacity: 0; transition: 0.5s; }
+        .ui-bar { background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; }
+        .row { display: flex; gap: 10px; align-items: center; color: white; }
         input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; }
-        input[type="color"] { width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
         .btn-row { display: flex; gap: 8px; }
-        button { flex: 1; padding: 15px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 15px; }
+        button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
-        .record-btn { background: #FF3B30; color: #fff; }
+        .rec-btn { background: #E02020; color: white; }
     </style>
 </head>
 <body>
@@ -32,9 +30,8 @@
     <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <img id="canvas-image">
-        <img id="kuo-end-img" src="IMG_6604.png">
+        <img id="kuo-logo" src="IMG_6604.png">
     </div>
-
     <div class="ui-bar">
         <div class="row">
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
@@ -43,24 +40,27 @@
         </div>
         <div class="btn-row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
-            <button class="record-btn" id="recBtn" onclick="App.startCapture()">穩定錄製並導出</button>
+            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">穩定錄製導出</button>
         </div>
     </div>
 </div>
 
-<canvas id="temp-cvs" style="display:none;"></canvas>
+<canvas id="offscreen" style="display:none;"></canvas>
 
 <script>
 const App = {
-    // 您的核心透視點
-    pts: [{x: 0.05, y: 0.35}, {x: 0.99, y: 0.18}, {x: 0.98, y: 0.74}, {x: 0.04, y: 0.55}],
-    timing: { start: 2.55, end: 3.83, trainArrive: 5.15 }, // 5.15秒列車開始遮擋
-    
+    // 修正：座標往內縮 (x 增加，避免切到火車) [cite: 2026-01-18]
+    pts: [
+        {x: 0.08, y: 0.36}, {x: 0.96, y: 0.22}, 
+        {x: 0.95, y: 0.70}, {x: 0.07, y: 0.54}
+    ],
+    timing: { start: 2.55, end: 3.83, hide: 5.1 },
+
     init: function() {
         this.v = document.getElementById('v');
         this.img = document.getElementById('canvas-image');
-        this.logoImg = document.getElementById('kuo-end-img');
-        this.cvs = document.getElementById('temp-cvs');
+        this.cvs = document.getElementById('offscreen');
+        this.logo = document.getElementById('kuo-logo');
         this.ctx = this.cvs.getContext('2d');
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
@@ -78,15 +78,15 @@ const App = {
     renderText: function() {
         this.cvs.width = 1800; this.cvs.height = 800;
         const txt = document.getElementById('userInput').value || "震撼地鐵";
-        this.ctx.clearRect(0,0,1800,800);
+        this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
-        this.ctx.translate(1790, 385);
+        this.ctx.translate(1780, 400); // 稍微往內移
         this.ctx.scale(0.6, 1.6);
         this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle';
-        this.ctx.font = '900 420px sans-serif';
+        this.ctx.font = '900 400px sans-serif';
         const tw = this.ctx.measureText(txt).width;
-        this.ctx.fillStyle = document.getElementById('bgColor').value + "CC";
-        this.ctx.roundRect(-tw - 20, -210, tw + 40, 420, 20);
+        this.ctx.fillStyle = document.getElementById('bgColor').value + "E6";
+        this.ctx.roundRect(-tw - 30, -220, tw + 60, 440, 30);
         this.ctx.fill();
         this.ctx.fillStyle = document.getElementById('textColor').value;
         this.ctx.fillText(txt, 0, 0);
@@ -97,29 +97,28 @@ const App = {
     play: function() { this.v.currentTime = 0; this.v.play(); },
 
     animate: function() {
-        const cur = this.v.currentTime;
-        // 預覽時的列車遮擋處理：當時間超過 trainArrive，隱藏文字
-        this.img.style.opacity = (cur >= this.timing.trainArrive) ? '0' : '1';
-        this.logoImg.style.opacity = (cur >= 4.8) ? '1' : '0';
-        
-        const prog = Math.max(0, Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start)));
-        this.img.style.clipPath = (cur < this.timing.start) ? 'inset(0 0 0 100%)' : (cur > this.timing.end ? 'inset(0 0 0 0%)' : `inset(0 0 0 ${100 - prog*100}%)`);
+        const t = this.v.currentTime;
+        // 火車開過來時隱藏文字
+        this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
+        this.logo.style.opacity = (t >= 4.8) ? '1' : '0';
+        const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
+        this.img.style.clipPath = (t < this.timing.start) ? 'inset(0 0 0 100%)' : (t > this.timing.end ? 'inset(0 0 0 0%)' : `inset(0 0 0 ${100 - prog*100}%)`);
         requestAnimationFrame(() => this.animate());
     },
 
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
-        btn.innerText = "錄製中..."; btn.disabled = true;
-
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = this.v.videoWidth || 720;
-        exportCanvas.height = this.v.videoHeight || 1280;
-        const eCtx = exportCanvas.getContext('2d');
-
-        const stream = exportCanvas.captureStream(30);
-        // 強制檢查格式
+        btn.disabled = true; btn.innerText = "錄製中...";
+        
+        const exportCvs = document.createElement('canvas');
+        exportCvs.width = this.v.videoWidth || 720;
+        exportCvs.height = this.v.videoHeight || 1280;
+        const eCtx = exportCvs.getContext('2d');
+        
+        // 自動挑選格式 [cite: 2026-01-18]
         const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 8000000 });
+        const stream = exportCvs.captureStream(30);
+        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 5000000 });
         const chunks = [];
         
         recorder.ondataavailable = e => chunks.push(e.data);
@@ -127,43 +126,35 @@ const App = {
             const blob = new Blob(chunks, { type: mime });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Subway_Record.${mime.includes('mp4')?'mp4':'webm'}`;
-            a.click();
-            btn.innerText = "穩定錄製並導出"; btn.disabled = false;
+            a.download = `Subway_Video.${mime.split('/')[1]}`; a.click();
+            btn.disabled = false; btn.innerText = "穩定錄製導出";
         };
 
         this.v.currentTime = 0;
         await this.v.play();
         recorder.start();
 
-        const renderLoop = () => {
+        const captureLoop = () => {
             if (recorder.state === "recording") {
-                const cur = this.v.currentTime;
-                
-                // 1. 先畫背景影片
-                eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
-                
-                // 2. 只有在列車還沒擋住看板前，才畫文字層
-                if (cur >= this.timing.start && cur < this.timing.trainArrive) {
-                    const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
+                const t = this.v.currentTime;
+                // 1. 畫背景
+                eCtx.drawImage(this.v, 0, 0, exportCvs.width, exportCvs.height);
+                // 2. 畫 3D 文字 (火車到之前)
+                if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
-                    const s = exportCanvas.width / 1800;
+                    const s = exportCvs.width / 1800;
                     eCtx.setTransform(this.m[0]*s, this.m[1]*s, this.m[4]*s, this.m[5]*s, this.m[12]*s, this.m[13]*s);
-                    eCtx.globalAlpha = prog;
                     eCtx.drawImage(this.cvs, 0, 0);
                     eCtx.restore();
                 }
-                
-                // 3. 結尾浮水印
-                if (cur >= 4.8) {
-                    eCtx.drawImage(this.logoImg, exportCanvas.width - 150, exportCanvas.height - 150, 120, 120);
-                }
+                // 3. 畫 Logo
+                if (t >= 4.8) eCtx.drawImage(this.logo, exportCvs.width-130, exportCvs.height-130, 100, 100);
 
-                if (this.v.ended || cur > 5.8) recorder.stop();
-                else requestAnimationFrame(renderLoop);
+                if (this.v.ended || t > 5.6) recorder.stop();
+                else requestAnimationFrame(captureLoop);
             }
         };
-        renderLoop();
+        captureLoop();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
