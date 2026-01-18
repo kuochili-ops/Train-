@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 進階展示版</title>
+    <title>地鐵 3D - 右對齊透明底版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, "Microsoft JhengHei", sans-serif; }
@@ -11,20 +11,17 @@
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; cursor: pointer; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
         
-        /* 3D 投影文字圖層 */
         #canvas-text { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2; pointer-events: none;
             clip-path: inset(0 0 0 100%);
         }
 
-        /* Logo 圖層 */
         #kuo-logo {
             position: absolute; bottom: 30px; right: 30px; width: 120px;
             z-index: 99; opacity: 0; transition: opacity 0.5s ease; pointer-events: none;
         }
 
-        /* 介面 */
         .ui-bar { 
             background: #111; padding: 15px 20px; 
             display: flex; flex-direction: column; gap: 12px; 
@@ -43,12 +40,12 @@
             width: 100%; background: #222; border: 1px solid #444; color: #fff; 
             padding: 12px; border-radius: 8px; font-size: 15px; box-sizing: border-box;
         }
-        .color-group { display: flex; gap: 15px; }
+        .color-group { display: flex; gap: 20px; }
         .cp { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 13px; }
         input[type="color"] { width: 32px; height: 32px; border: none; background: none; cursor: pointer; }
         
         .main-btn { 
-            background: #ff3b30; color: #fff; border: none; padding: 14px; 
+            background: #fff; color: #000; border: none; padding: 14px; 
             border-radius: 10px; font-weight: bold; font-size: 15px; cursor: pointer; flex: 1;
         }
     </style>
@@ -59,21 +56,22 @@
     <div class="viewport" onclick="App.toggleUI()">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <img id="canvas-text">
-        <img id="kuo-logo" src="IMG_6604.png"> </div>
+        <img id="kuo-logo" src="IMG_6604.png">
+    </div>
 
     <div class="ui-bar" id="ui">
         <div class="row">
             <div class="col">
-                <label>互動文字內容</label>
-                <input type="text" id="userInput" placeholder="請輸入文字..." value="祝大家新年快樂，平安順心" oninput="App.renderText()">
+                <label>文字內容 (自動換行/右對齊)</label>
+                <input type="text" id="userInput" placeholder="輸入文字..." value="白六祝大家新年快樂，龍年大吉" oninput="App.renderText()">
             </div>
         </div>
         <div class="row">
             <div class="color-group">
                 <div class="cp"><input type="color" id="textColor" value="#ffffff" oninput="App.renderText()"> 文字</div>
-                <div class="cp"><input type="color" id="bgColor" value="#000000" oninput="App.renderText()"> 底色</div>
+                <div class="cp"><input type="color" id="bgColor" value="#000000" oninput="App.renderText()"> 底色(黑代表透明)</div>
             </div>
-            <button class="main-btn" onclick="App.toggleUI(true)">開始沉浸預覽</button>
+            <button class="main-btn" onclick="App.toggleUI(true)">進入展示</button>
         </div>
     </div>
 </div>
@@ -104,7 +102,6 @@ const App = {
         if(forceHide) this.uiHidden = true;
         else this.uiHidden = !this.uiHidden;
         document.getElementById('ui').classList.toggle('ui-hide', this.uiHidden);
-        if(this.uiHidden) { this.v.currentTime = 0; this.v.play(); }
     },
 
     updateWarp: function() {
@@ -114,39 +111,38 @@ const App = {
         this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
 
-    // 自動分行邏輯
-    wrapText: function(text, maxChars) {
-        let lines = [];
-        for (let i = 0; i < text.length; i += maxChars) {
-            lines.push(text.substring(i, i + maxChars));
-        }
-        return lines;
-    },
-
     renderText: function() {
         this.txtCvs.width = 1800; this.txtCvs.height = 800;
-        const txt = document.getElementById('userInput').value || "請輸入文字";
+        const txt = document.getElementById('userInput').value || "";
         const txtColor = document.getElementById('textColor').value;
         const bgColor = document.getElementById('bgColor').value;
 
-        // 背景填充
+        // 背景
         this.ctx.fillStyle = bgColor;
         this.ctx.fillRect(0, 0, 1800, 800);
 
         this.ctx.save();
-        this.ctx.textAlign = 'center';
+        this.ctx.textAlign = 'right'; // 🔴 向右對齊
         this.ctx.textBaseline = 'middle';
         this.ctx.fillStyle = txtColor;
-        this.ctx.font = '900 180px sans-serif'; // 縮小字號以利分行
+        this.ctx.font = '900 160px sans-serif'; // 稍微調小字號確保多行空間
         
-        const lines = this.wrapText(txt, 8); // 每行最多 8 個字
-        const lineHeight = 220;
-        const startY = 400 - ((lines.length - 1) * lineHeight) / 2;
+        const maxCharsPerLine = 8;
+        let lines = [];
+        for (let i = 0; i < txt.length; i += maxCharsPerLine) {
+            lines.push(txt.substring(i, i + maxCharsPerLine));
+        }
+
+        // 🔴 行間距計算：160px 字高 + 60px 間距 = 220px 確保不重疊
+        const lineHeight = 220; 
+        const totalHeight = lines.length * lineHeight;
+        const startY = 400 - (totalHeight / 2) + (lineHeight / 2);
 
         lines.forEach((line, i) => {
             this.ctx.save();
-            this.ctx.translate(900, startY + (i * lineHeight));
-            this.ctx.scale(1.2, 1.8); // 保持縱向拉伸美感
+            // X 位置設在 1720 (留 80px 右邊距避免切字)
+            this.ctx.translate(1720, startY + (i * lineHeight));
+            this.ctx.scale(1.1, 1.8); 
             this.ctx.fillText(line, 0, 0);
             this.ctx.restore();
         });
@@ -159,16 +155,11 @@ const App = {
         const t = this.v.currentTime;
         const duration = this.v.duration || 5.8;
 
-        // 1. 文字動畫
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
 
-        // 2. Logo 時間軸：影片結束前 3 秒出現
-        if (t >= (duration - 3) && t < (duration - 0.1)) {
-            this.logo.style.opacity = '1';
-        } else {
-            this.logo.style.opacity = '0';
-        }
+        // Logo 結束前 3 秒
+        this.logo.style.opacity = (t >= (duration - 3) && t < (duration - 0.1)) ? '1' : '0';
 
         requestAnimationFrame(() => this.animate());
     },
