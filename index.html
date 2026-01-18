@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影效果對位修正版</title>
+    <title>地鐵 3D - 錄影模組整合版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -50,8 +50,41 @@
 <canvas id="offscreen" style="display:none;"></canvas>
 
 <script>
+/**
+ * Canvas 錄製模組 - KUO Flip-board Method
+ */
+const CanvasRecorder = {
+    recorder: null,
+    chunks: [],
+    start(sourceCanvas, fps = 30) {
+        this.chunks = [];
+        const stream = sourceCanvas.captureStream(fps);
+        const options = { mimeType: 'video/webm;codecs=vp9' };
+        this.recorder = new MediaRecorder(stream, options);
+        this.recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) this.chunks.push(e.data);
+        };
+        this.recorder.start();
+    },
+    stop(fileName = "export_video") {
+        return new Promise((resolve) => {
+            this.recorder.onstop = () => {
+                const blob = new Blob(this.chunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${fileName}.webm`;
+                a.click();
+                URL.revokeObjectURL(url);
+                resolve(blob);
+            };
+            this.recorder.stop();
+        });
+    }
+};
+
 const App = {
-    // 最終定位點優化：x 更左 (0.05), 左下 y 更深 (0.68)
+    // 恢復完美定位點設定
     pts: [
         {x: 0.05, y: 0.36}, {x: 0.94, y: 0.22}, 
         {x: 0.94, y: 0.78}, {x: 0.05, y: 0.68}
@@ -144,59 +177,39 @@ const App = {
         exportCvs.width = vW; exportCvs.height = vH;
         const eCtx = exportCvs.getContext('2d', {alpha: false});
         
-        const stream = exportCvs.captureStream(30);
-        const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 15000000 });
-        const chunks = [];
-        
-        recorder.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: mime });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `Metro_Sync_Export.${mime.split('/')[1]}`; a.click();
-            
-            setTimeout(() => {
-                this.isRecording = false;
-                btn.disabled = false;
-                btn.innerText = "穩定錄製導出";
-                this.v.loop = true;
-            }, 500);
-        };
+        // 使用外部錄影模組
+        CanvasRecorder.start(exportCvs, 30);
 
         this.v.loop = false;
         this.v.currentTime = 0;
         await this.v.play();
-        recorder.start();
 
-        const renderFrame = () => {
-            if (this.isRecording && recorder.state === "recording") {
+        const renderFrame = async () => {
+            if (this.isRecording) {
                 const t = this.v.currentTime;
                 eCtx.drawImage(this.v, 0, 0, vW, vH);
                 
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
-                    // 重要：將錄影畫布的縮放比例與預覽螢幕完全掛鉤
-                    const scaleX = vW / this.currentStageRect.width;
-                    const scaleY = vH / this.currentStageRect.height;
-                    
-                    // 根據影片解析度動態修正矩陣座標
                     const p = this.pts.map(pt => ({ x: pt.x * vW, y: pt.y * vH }));
                     const mRec = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-                    
                     eCtx.setTransform(mRec[0], mRec[1], mRec[4], mRec[5], mRec[12], mRec[13]);
-                    
-                    // 裁切邏輯同步
                     const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
                     const clipX = 1800 * (1 - prog);
                     eCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
                     eCtx.restore();
                 }
-
                 if (t >= 4.8) eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
 
-                if (t >= this.timing.stop || this.v.ended) recorder.stop();
-                else requestAnimationFrame(renderFrame);
+                if (t >= this.timing.stop || this.v.ended) {
+                    await CanvasRecorder.stop("Metro_FlipBoard_Export");
+                    this.isRecording = false;
+                    btn.disabled = false;
+                    btn.innerText = "穩定錄製導出";
+                    this.v.loop = true;
+                } else {
+                    requestAnimationFrame(renderFrame);
+                }
             }
         };
         renderFrame();
