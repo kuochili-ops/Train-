@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 自適應排版版</title>
+    <title>地鐵 3D - 專業分享版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, "Microsoft JhengHei", sans-serif; }
@@ -18,7 +18,7 @@
         }
 
         #kuo-logo {
-            position: absolute; bottom: 30px; right: 30px; width: 120px;
+            position: absolute; bottom: 30px; right: 30px; width: 100px;
             z-index: 99; opacity: 0; transition: opacity 0.5s ease; pointer-events: none;
         }
 
@@ -30,7 +30,7 @@
             padding-bottom: calc(var(--safe-bottom) + 10px);
             z-index: 100;
         }
-        .ui-hide { transform: translateY(100%); }
+        .ui-hide { transform: translateY(100%); display: none; }
 
         .row { display: flex; gap: 10px; align-items: center; }
         .col { display: flex; flex-direction: column; gap: 4px; flex: 1; }
@@ -38,16 +38,14 @@
 
         input[type="text"] { 
             width: 100%; background: #222; border: 1px solid #444; color: #fff; 
-            padding: 12px; border-radius: 8px; font-size: 15px; box-sizing: border-box;
+            padding: 12px; border-radius: 8px; font-size: 15px;
         }
-        .color-group { display: flex; gap: 20px; }
-        .cp { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 13px; }
-        input[type="color"] { width: 32px; height: 32px; border: none; background: none; cursor: pointer; }
+        .color-group { display: flex; gap: 15px; }
+        .cp { display: flex; align-items: center; gap: 6px; color: #eee; font-size: 12px; }
+        input[type="color"] { width: 28px; height: 28px; border: none; background: none; }
         
-        .main-btn { 
-            background: #fff; color: #000; border: none; padding: 14px; 
-            border-radius: 10px; font-weight: bold; font-size: 15px; cursor: pointer; flex: 1;
-        }
+        .btn-share { background: #34c759; color: #fff; border: none; padding: 14px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .main-btn { background: #fff; color: #000; border: none; padding: 14px; border-radius: 10px; font-weight: bold; flex: 1; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -62,15 +60,15 @@
     <div class="ui-bar" id="ui">
         <div class="row">
             <div class="col">
-                <label>文字內容 (自適應高度)</label>
                 <input type="text" id="userInput" placeholder="輸入文字..." value="新年快樂" oninput="App.renderText()">
             </div>
         </div>
         <div class="row">
             <div class="color-group">
-                <div class="cp"><input type="color" id="textColor" value="#ffffff" oninput="App.renderText()"> 文字</div>
-                <div class="cp"><input type="color" id="bgColor" value="#000000" oninput="App.renderText()"> 底色</div>
+                <div class="cp"><input type="color" id="textColor" value="#ffffff" oninput="App.renderText()"> 文</div>
+                <div class="cp"><input type="color" id="bgColor" value="#000000" oninput="App.renderText()"> 底</div>
             </div>
+            <button class="btn-share" onclick="App.copyShareLink()">分享連結</button>
             <button class="main-btn" onclick="App.toggleUI(true)">進入展示</button>
         </div>
     </div>
@@ -80,9 +78,9 @@
 
 <script>
 const App = {
-    pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
+    // 🔴 調整左側座標：x 從 0.08 改為 0.35，避開列車
+    pts: [{x: 0.35, y: 0.32}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.35, y: 0.62}],
     timing: { start: 2.55, end: 3.83, hide: 5.35 },
-    uiHidden: false,
 
     init: function() {
         this.v = document.getElementById('v');
@@ -91,6 +89,13 @@ const App = {
         this.txtCvs = document.getElementById('text-canvas');
         this.ctx = this.txtCvs.getContext('2d');
         
+        // 檢查是否有分享參數
+        const params = new URLSearchParams(window.location.search);
+        if(params.has('t')) document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
+        if(params.has('tc')) document.getElementById('textColor').value = '#' + params.get('tc');
+        if(params.has('bc')) document.getElementById('bgColor').value = '#' + params.get('bc');
+        if(params.get('mode') === 'share') this.toggleUI(true);
+
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.renderText();
@@ -98,10 +103,19 @@ const App = {
         this.animate();
     },
 
+    copyShareLink: function() {
+        const t = encodeURIComponent(document.getElementById('userInput').value);
+        const tc = document.getElementById('textColor').value.replace('#','');
+        const bc = document.getElementById('bgColor').value.replace('#','');
+        const url = `${window.location.origin}${window.location.pathname}?t=${t}&tc=${tc}&bc=${bc}&mode=share`;
+        
+        navigator.clipboard.writeText(url).then(() => alert('分享連結已複製！開啟連結將自動隱藏介面。'));
+    },
+
     toggleUI: function(forceHide = false) {
-        if(forceHide) this.uiHidden = true;
-        else this.uiHidden = !this.uiHidden;
-        document.getElementById('ui').classList.toggle('ui-hide', this.uiHidden);
+        const ui = document.getElementById('ui');
+        if(forceHide) ui.classList.add('ui-hide');
+        else ui.classList.toggle('ui-hide');
     },
 
     updateWarp: function() {
@@ -114,44 +128,30 @@ const App = {
     renderText: function() {
         this.txtCvs.width = 1800; this.txtCvs.height = 800;
         const txt = document.getElementById('userInput').value || "";
-        const txtColor = document.getElementById('textColor').value;
-        const bgColor = document.getElementById('bgColor').value;
-
-        this.ctx.fillStyle = bgColor;
+        this.ctx.fillStyle = document.getElementById('bgColor').value;
         this.ctx.fillRect(0, 0, 1800, 800);
 
-        // 分行邏輯：若總長度大於 7 則分行
-        const maxChars = 7;
+        // 分行邏輯
+        const maxChars = 6;
         let lines = [];
-        for (let i = 0; i < txt.length; i += maxChars) {
-            lines.push(txt.substring(i, i + maxChars));
-        }
+        for (let i = 0; i < txt.length; i += maxChars) lines.push(txt.substring(i, i + maxChars));
 
         this.ctx.save();
         this.ctx.textAlign = 'right';
         this.ctx.textBaseline = 'middle';
-        this.ctx.fillStyle = txtColor;
+        this.ctx.fillStyle = document.getElementById('textColor').value;
 
-        // 核心邏輯：根據行數調整字級與伸展
-        let fontSize, scaleY, lineHeight;
-        if (lines.length === 1) {
-            fontSize = 320; // 單行時字體極大
-            scaleY = 2.2;   // 強烈縱向伸展，貼近邊緣
-            lineHeight = 0;
-        } else {
-            fontSize = 180; // 多行時縮小
-            scaleY = 1.6;   // 溫和伸展
-            lineHeight = 240;
-        }
+        let fontSize = lines.length === 1 ? 350 : 200;
+        let scaleY = lines.length === 1 ? 2.0 : 1.5;
+        let lineHeight = 250;
 
         this.ctx.font = `900 ${fontSize}px sans-serif`;
-        const totalHeight = (lines.length - 1) * lineHeight;
-        const startY = 400 - (totalHeight / 2);
+        const startY = 400 - ((lines.length - 1) * lineHeight) / 2;
 
         lines.forEach((line, i) => {
             this.ctx.save();
-            this.ctx.translate(1720, startY + (i * lineHeight));
-            this.ctx.scale(0.85, scaleY); // X 軸稍微收縮更有時尚感
+            this.ctx.translate(1700, startY + (i * lineHeight));
+            this.ctx.scale(0.9, scaleY);
             this.ctx.fillText(line, 0, 0);
             this.ctx.restore();
         });
