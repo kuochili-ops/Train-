@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 最終完美版</title>
+    <title>地鐵 3D 定位修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 1800px; }
+        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 2000px; }
         
         video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         #canvas-image { 
@@ -18,7 +18,6 @@
             pointer-events: none;
         }
 
-        /* Logo 再次下移壓底 */
         #kuo-end-img {
             position: absolute; bottom: 25px; right: 25px; width: 125px;
             z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen;
@@ -41,18 +40,9 @@
         .share-btn { background: #007AFF; color: white; }
         .rec-btn { background: #E02020; color: #fff; }
         .toggle-ui { position: absolute; top: -35px; right: 20px; background: #111; color: #888; padding: 4px 15px; border-radius: 8px 8px 0 0; font-size: 11px; border: 1px solid #333; }
-
-        #status-toast { 
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: #28a745; color: white; padding: 10px 25px; border-radius: 50px;
-            z-index: 2000; opacity: 0; transition: 0.4s; pointer-events: none;
-        }
-        body.share-mode .ui-bar { display: none !important; }
     </style>
 </head>
 <body>
-
-<div id="status-toast">分享連結已複製！</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
@@ -65,7 +55,7 @@
         <button class="toggle-ui" onclick="document.getElementById('mainUI').classList.toggle('collapsed')">收合介面</button>
         <div class="row">
             <input type="color" id="textColor" value="#000000">
-            <input type="text" id="userInput" placeholder="輸入文字 (2英文字 = 1中文字)">
+            <input type="text" id="userInput" placeholder="輸入文字 (高度縮小 / 定位右移)">
         </div>
         <div class="row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
@@ -79,9 +69,10 @@
 
 <script>
 const App = {
+    // 右邊定位點再向右推 2% (0.96 -> 0.98) [cite: 2026-01-18]
     pts: [
-        {x: 0.04, y: 0.38}, {x: 0.96, y: 0.25}, 
-        {x: 0.95, y: 0.77}, {x: 0.03, y: 0.58}
+        {x: 0.03, y: 0.38}, {x: 0.98, y: 0.24}, 
+        {x: 0.97, y: 0.78}, {x: 0.02, y: 0.58}
     ],
     timing: { start: 2.55, end: 3.83 }, 
     
@@ -92,13 +83,6 @@ const App = {
         this.input = document.getElementById('userInput');
         this.colorPicker = document.getElementById('textColor');
         
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('msg')) {
-            this.input.value = decodeURIComponent(params.get('msg'));
-            this.colorPicker.value = '#' + params.get('clr');
-            document.body.classList.add('share-mode');
-            this.v.oncanplay = () => this.play(); 
-        }
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.animate();
@@ -112,30 +96,10 @@ const App = {
         this.img.style.transform = `matrix3d(${this.m.join(',')})`;
     },
 
-    generateShareUrl: function() {
-        const msg = encodeURIComponent(this.input.value);
-        const clr = this.colorPicker.value.replace('#', '');
-        const shareUrl = `${window.location.origin}${window.location.pathname}?msg=${msg}&clr=${clr}`;
-        navigator.clipboard.writeText(shareUrl).then(() => {
-            const toast = document.getElementById('status-toast');
-            toast.style.opacity = "1";
-            setTimeout(() => toast.style.opacity = "0", 3000);
-        });
-    },
-
     play: function() {
         this.renderOffscreenText();
         this.v.currentTime = 0;
         this.v.play();
-    },
-
-    // 新增中英混合長度計算邏輯 [cite: 2026-01-18]
-    getCharLen: function(str) {
-        let len = 0;
-        for (let i = 0; i < str.length; i++) {
-            len += str.charCodeAt(i) < 128 ? 0.5 : 1;
-        }
-        return len;
     },
 
     renderOffscreenText: function() {
@@ -146,34 +110,31 @@ const App = {
         ctx.clearRect(0,0,1800,800);
 
         let lines = [];
-        if (rawText.includes('/')) {
-            lines = rawText.split('/');
-        } else {
-            // 自動分行邏輯：每 6 個中文字寬度切一行 [cite: 2026-01-18]
-            let currentLine = "";
-            let currentLen = 0;
-            for (let char of rawText) {
-                let cLen = char.charCodeAt(0) < 128 ? 0.5 : 1;
-                if (currentLen + cLen > 6.2) {
-                    lines.push(currentLine);
-                    currentLine = char; currentLen = cLen;
-                } else {
-                    currentLine += char; currentLen += cLen;
-                }
+        let currentLine = "";
+        let currentLen = 0;
+        for (let char of rawText) {
+            let cLen = char.charCodeAt(0) < 128 ? 0.5 : 1;
+            if (currentLen + cLen > 6.2) {
+                lines.push(currentLine);
+                currentLine = char; currentLen = cLen;
+            } else {
+                currentLine += char; currentLen += cLen;
             }
-            if (currentLine) lines.push(currentLine);
         }
+        if (currentLine) lines.push(currentLine);
 
         let lineCount = lines.length;
-        let baseSize = 500; 
-        // 降低字高倍率 (0.85)，確保分行時字體縮得夠小 [cite: 2026-01-18]
-        let finalSize = baseSize / (lineCount > 1 ? (lineCount * 0.85) : 1);
+        // 修正 1：縮小字高度倍率，從 500 降至 430，增加留白 [cite: 2026-01-18]
+        let baseSize = 430; 
+        let finalSize = baseSize / (lineCount > 1 ? (lineCount * 0.82) : 1);
         
         let stretchX = lineCount > 1 ? 0.50 : 0.60; 
-        let stretchY = 1.65; 
+        // 修正 2：垂直拉伸倍率微降，讓字體更顯精緻不笨重 [cite: 2026-01-18]
+        let stretchY = 1.55; 
 
         ctx.save();
-        ctx.translate(1780, 400); 
+        // 修正 3：定位點向右平移至極限 (1780 -> 1795) [cite: 2026-01-18]
+        ctx.translate(1795, 400); 
         ctx.scale(stretchX, stretchY); 
 
         ctx.fillStyle = this.colorPicker.value;
@@ -182,8 +143,7 @@ const App = {
         ctx.font = `900 ${finalSize}px "Impact", "Arial Black", sans-serif`;
 
         lines.forEach((line, i) => {
-            // 增加行間距補償 (1.3)，徹底避免「樣」等字重疊 [cite: 2026-01-18]
-            const spacing = finalSize * 1.3;
+            const spacing = finalSize * 1.35;
             const yOffset = (i - (lineCount - 1) / 2) * spacing;
             ctx.fillText(line, 0, yOffset / stretchY);
         });
@@ -220,7 +180,7 @@ const App = {
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = `Subway_3D_Perfect.webm`; a.click();
+            a.href = URL.createObjectURL(blob); a.download = `Subway_3D_Adjusted.webm`; a.click();
             btn.innerText = "錄製"; btn.disabled = false;
         };
         this.v.currentTime = 0; await this.v.play(); recorder.start();
