@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影座標校正版</title>
+    <title>地鐵 3D - 錄影對位最終修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -79,13 +79,12 @@ const CanvasRecorder = {
 };
 
 const App = {
-    // 根據綠板區域嚴格對位：左下 pts[3].y 再次上移至 0.52
+    // 定位點：針對錄製進行校準，pts[3].y 為 0.52
     pts: [
         {x: 0.05, y: 0.38}, {x: 0.94, y: 0.22}, 
         {x: 0.94, y: 0.78}, {x: 0.05, y: 0.52}
     ],
-    // 消失時間延後，確保地鐵過後文字才消失，不留最後一幀的殘影
-    timing: { start: 2.55, end: 3.83, hide: 5.40, stop: 5.60 }, 
+    timing: { start: 2.55, end: 3.83, hide: 5.45, stop: 5.60 }, 
     isRecording: false,
 
     init: function() {
@@ -109,24 +108,42 @@ const App = {
 
     renderText: function() {
         this.cvs.width = 1800; this.cvs.height = 800;
-        const txt = document.getElementById('userInput').value || "祝大家新年快樂！";
+        const txt = document.getElementById('userInput').value || "白六㊗️大家新年快樂唷！";
         const bgColor = document.getElementById('bgColor').value;
         const textColor = document.getElementById('textColor').value;
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
+        
+        // 恢復之前的文字處理邏輯
         let lines = (txt.length > 9) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
-        this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
+        this.ctx.translate(1750, 400); 
+        this.ctx.textAlign = 'right';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillStyle = textColor;
+
         if (bgColor !== "#000000") {
-            this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
-            let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
-            lines.forEach(l => { let w = this.ctx.measureText(l).width * 0.85; if(w > maxW) maxW = w; });
+            this.ctx.save();
+            this.ctx.fillStyle = bgColor + "E6";
+            let maxW = 0;
+            this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+            lines.forEach(l => {
+                let w = this.ctx.measureText(l).width * 0.85;
+                if(w > maxW) maxW = w;
+            });
             this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
-            this.ctx.fill(); this.ctx.restore();
+            this.ctx.fill();
+            this.ctx.restore();
         }
+
         if (lines.length === 1) {
-            this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0);
+            this.ctx.scale(0.85, 2.0);
+            this.ctx.font = '900 350px sans-serif';
+            this.ctx.fillText(lines[0], 0, 0);
         } else {
-            this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120);
+            this.ctx.scale(0.85, 1.3); 
+            this.ctx.font = '900 240px sans-serif';
+            this.ctx.fillText(lines[0], 0, -120);
+            this.ctx.fillText(lines[1], 0, 120);
         }
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
@@ -146,8 +163,7 @@ const App = {
     startCapture: async function() {
         if (this.isRecording) return;
         const btn = document.getElementById('recBtn');
-        this.isRecording = true;
-        btn.disabled = true; btn.innerText = "座標同步中...";
+        this.isRecording = true; btn.disabled = true; btn.innerText = "正在精準導出...";
         
         const vW = this.v.videoWidth;
         const vH = this.v.videoHeight;
@@ -161,16 +177,15 @@ const App = {
         const renderFrame = async () => {
             if (this.isRecording) {
                 const t = this.v.currentTime;
-                // 1. 繪製背景影片
                 eCtx.drawImage(this.v, 0, 0, vW, vH);
                 
-                // 2. 繪製文字（改用原生矩陣，防止錄影偏移）
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
+                    // 關鍵修正：確保錄影矩陣計算時完全對齊影片原生解析度
                     const p = this.pts.map(pt => ({ x: pt.x * vW, y: pt.y * vH }));
                     const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
                     
-                    // 修正 Canvas 矩陣順序，強迫與預覽解析度解耦，直接對位
+                    // 重置矩陣並套用校準後的 2D transform
                     eCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
                     
                     const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
@@ -178,11 +193,10 @@ const App = {
                     eCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
                     eCtx.restore();
                 }
-
                 if (t >= 4.8) eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
 
                 if (t >= this.timing.stop || this.v.ended) {
-                    await CanvasRecorder.stop("Metro_Calibration_Export");
+                    await CanvasRecorder.stop("Metro_Fixed_Perspective");
                     this.isRecording = false; btn.disabled = false; btn.innerText = "穩定錄製導出"; this.v.loop = true;
                 } else {
                     requestAnimationFrame(renderFrame);
