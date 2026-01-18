@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 自動分行優化版</title>
+    <title>地鐵 3D - Logo 延遲呈現版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -14,7 +14,16 @@
             transform-origin: 0 0; z-index: 2; pointer-events: none;
             clip-path: inset(0 0 0 100%);
         }
-        #kuo-logo { position: absolute; bottom: 20px; right: 20px; width: 100px; z-index: 9; opacity: 0; transition: 0.5s; }
+        /* Logo 初始透明度為 0，並增加平滑過渡 */
+        #kuo-logo { 
+            position: absolute; 
+            bottom: 30px; 
+            right: 30px; 
+            width: 120px; 
+            z-index: 9; 
+            opacity: 0; 
+            transition: opacity 1.5s ease-in-out; 
+        }
         .ui-bar { background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; }
         .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 13px; }
         input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; }
@@ -39,7 +48,7 @@
             <input type="text" id="userInput" placeholder="請輸入文字..." oninput="App.renderText()">
         </div>
         <div class="btn-row">
-            <button class="preview-btn" onclick="App.play()">預覽</button>
+            <button class="preview-btn" onclick="App.play()">播放預覽</button>
         </div>
     </div>
 </div>
@@ -48,14 +57,14 @@
 
 <script>
 const App = {
-    // 保留您校準完美的點位
+    // 完美的 90 度垂直定位點
     pts: [
         {x: 0.08, y: 0.35}, // 左上
         {x: 0.94, y: 0.22}, // 右上
         {x: 0.94, y: 0.78}, // 右下
         {x: 0.08, y: 0.58}  // 左下
     ],
-    timing: { start: 2.55, end: 3.83, hide: 5.35 }, 
+    timing: { start: 2.55, end: 3.83, logoStart: 4.8, hide: 5.35 }, 
 
     init: function() {
         this.v = document.getElementById('v');
@@ -86,20 +95,13 @@ const App = {
         this.ctx.save();
         
         // 分行邏輯：超過 6 個字就切兩行
-        let lines = [];
-        if (rawTxt.length <= 6) {
-            lines = [rawTxt];
-        } else {
-            const mid = Math.ceil(rawTxt.length / 2);
-            lines = [rawTxt.substring(0, mid), rawTxt.substring(mid)];
-        }
+        let lines = (rawTxt.length <= 6) ? [rawTxt] : [rawTxt.substring(0, Math.ceil(rawTxt.length/2)), rawTxt.substring(Math.ceil(rawTxt.length/2))];
 
         this.ctx.translate(1750, 400); 
         this.ctx.textAlign = 'right'; 
         this.ctx.textBaseline = 'middle'; 
         this.ctx.fillStyle = textColor;
 
-        // 繪製背景塊
         if (bgColor !== "#000000") {
             this.ctx.save();
             this.ctx.fillStyle = bgColor + "E6";
@@ -114,31 +116,39 @@ const App = {
             this.ctx.restore();
         }
 
-        // 繪製文字
         if (lines.length === 1) {
-            this.ctx.scale(0.85, 2.0); // 單行拉高視覺感
+            this.ctx.scale(0.85, 2.0);
             this.ctx.font = '900 350px sans-serif';
             this.ctx.fillText(lines[0], 0, 0);
         } else {
-            this.ctx.scale(0.85, 1.3); // 兩行縮小比例
+            this.ctx.scale(0.85, 1.3);
             this.ctx.font = '900 240px sans-serif';
             this.ctx.fillText(lines[0], 0, -120);
             this.ctx.fillText(lines[1], 0, 120);
         }
-        
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
     },
 
-    play: function() { this.v.currentTime = 0; this.v.play(); },
+    play: function() { 
+        this.v.currentTime = 0; 
+        this.v.play(); 
+    },
 
     animate: function() {
         const t = this.v.currentTime;
         const isOut = t >= this.timing.hide;
+        
+        // 1. 看板顯示控制
         this.img.style.display = isOut ? 'none' : 'block';
-        this.logo.style.opacity = (t >= 4.8) ? '1' : '0';
+        
+        // 2. Logo 延遲顯示邏輯 (最後兩秒)
+        this.logo.style.opacity = (t >= this.timing.logoStart) ? '1' : '0';
+        
+        // 3. 翻牌/展開動畫
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = isOut ? 'inset(0 0 0 100%)' : ((t < this.timing.start) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`);
+        
         requestAnimationFrame(() => this.animate());
     },
 
