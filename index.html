@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 穩定錄製修正版</title>
+    <title>地鐵 3D - 列車遮罩修復版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -15,12 +15,13 @@
             clip-path: inset(0 0 0 100%); 
         }
         #kuo-end-img { position: absolute; bottom: 25px; right: 25px; width: 120px; z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen; }
-        .ui-bar { background: #111; padding: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; border-top: 1px solid #333; }
-        .row { display: flex; gap: 8px; align-items: center; color: #fff; font-size: 12px; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 8px; }
-        input[type="color"] { width: 35px; height: 35px; border: none; background: none; }
+        
+        .ui-bar { background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; z-index: 1000; border-top: 1px solid #333; }
+        .row { display: flex; gap: 10px; align-items: center; color: #fff; font-size: 14px; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; }
+        input[type="color"] { width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
         .btn-row { display: flex; gap: 8px; }
-        button { flex: 1; padding: 14px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+        button { flex: 1; padding: 15px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 15px; }
         .preview-btn { background: #333; color: white; }
         .record-btn { background: #FF3B30; color: #fff; }
     </style>
@@ -42,7 +43,7 @@
         </div>
         <div class="btn-row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
-            <button class="record-btn" id="recBtn" onclick="App.startCapture()">開始錄製</button>
+            <button class="record-btn" id="recBtn" onclick="App.startCapture()">穩定錄製並導出</button>
         </div>
     </div>
 </div>
@@ -51,8 +52,9 @@
 
 <script>
 const App = {
+    // 您的核心透視點
     pts: [{x: 0.05, y: 0.35}, {x: 0.99, y: 0.18}, {x: 0.98, y: 0.74}, {x: 0.04, y: 0.55}],
-    timing: { start: 2.55, end: 3.83 },
+    timing: { start: 2.55, end: 3.83, trainArrive: 5.15 }, // 5.15秒列車開始遮擋
     
     init: function() {
         this.v = document.getElementById('v');
@@ -96,7 +98,10 @@ const App = {
 
     animate: function() {
         const cur = this.v.currentTime;
+        // 預覽時的列車遮擋處理：當時間超過 trainArrive，隱藏文字
+        this.img.style.opacity = (cur >= this.timing.trainArrive) ? '0' : '1';
         this.logoImg.style.opacity = (cur >= 4.8) ? '1' : '0';
+        
         const prog = Math.max(0, Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = (cur < this.timing.start) ? 'inset(0 0 0 100%)' : (cur > this.timing.end ? 'inset(0 0 0 0%)' : `inset(0 0 0 ${100 - prog*100}%)`);
         requestAnimationFrame(() => this.animate());
@@ -111,59 +116,54 @@ const App = {
         exportCanvas.height = this.v.videoHeight || 1280;
         const eCtx = exportCanvas.getContext('2d');
 
-        // 自動檢測設備支援的格式 [cite: 2026-01-18]
-        const types = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
-        const supportedType = types.find(t => MediaRecorder.isTypeSupported(t));
+        const stream = exportCanvas.captureStream(30);
+        // 強制檢查格式
+        const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 8000000 });
+        const chunks = [];
+        
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: mime });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `Subway_Record.${mime.includes('mp4')?'mp4':'webm'}`;
+            a.click();
+            btn.innerText = "穩定錄製並導出"; btn.disabled = false;
+        };
 
-        if (!supportedType) {
-            alert("您的設備不支援網頁錄影。");
-            btn.innerText = "錄製"; btn.disabled = false;
-            return;
-        }
+        this.v.currentTime = 0;
+        await this.v.play();
+        recorder.start();
 
-        try {
-            const stream = exportCanvas.captureStream(30);
-            const recorder = new MediaRecorder(stream, { mimeType: supportedType, bitsPerSecond: 8000000 });
-            const chunks = [];
-            recorder.ondataavailable = e => chunks.push(e.data);
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: supportedType });
-                const ext = supportedType.includes('mp4') ? 'mp4' : 'webm';
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `Subway_3D.${ext}`; a.click();
-                btn.innerText = "錄製"; btn.disabled = false;
-            };
-
-            this.v.currentTime = 0;
-            await this.v.play();
-            recorder.start();
-
-            const renderLoop = () => {
-                if (recorder.state === "recording") {
-                    eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
-                    const cur = this.v.currentTime;
-                    if (cur >= this.timing.start) {
-                        const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
-                        eCtx.save();
-                        const s = exportCanvas.width / 1800;
-                        eCtx.setTransform(this.m[0]*s, this.m[1]*s, this.m[4]*s, this.m[5]*s, this.m[12]*s, this.m[13]*s);
-                        eCtx.globalAlpha = prog;
-                        eCtx.drawImage(this.cvs, 0, 0);
-                        eCtx.restore();
-                    }
-                    if (this.logoImg.style.opacity === '1') {
-                        eCtx.drawImage(this.logoImg, exportCanvas.width - 150, exportCanvas.height - 150, 120, 120);
-                    }
-                    if (this.v.ended || cur > 5.5) recorder.stop();
-                    else requestAnimationFrame(renderLoop);
+        const renderLoop = () => {
+            if (recorder.state === "recording") {
+                const cur = this.v.currentTime;
+                
+                // 1. 先畫背景影片
+                eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
+                
+                // 2. 只有在列車還沒擋住看板前，才畫文字層
+                if (cur >= this.timing.start && cur < this.timing.trainArrive) {
+                    const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
+                    eCtx.save();
+                    const s = exportCanvas.width / 1800;
+                    eCtx.setTransform(this.m[0]*s, this.m[1]*s, this.m[4]*s, this.m[5]*s, this.m[12]*s, this.m[13]*s);
+                    eCtx.globalAlpha = prog;
+                    eCtx.drawImage(this.cvs, 0, 0);
+                    eCtx.restore();
                 }
-            };
-            renderLoop();
-        } catch (err) {
-            alert("錄製錯誤: " + err.message);
-            btn.innerText = "錄製"; btn.disabled = false;
-        }
+                
+                // 3. 結尾浮水印
+                if (cur >= 4.8) {
+                    eCtx.drawImage(this.logoImg, exportCanvas.width - 150, exportCanvas.height - 150, 120, 120);
+                }
+
+                if (this.v.ended || cur > 5.8) recorder.stop();
+                else requestAnimationFrame(renderLoop);
+            }
+        };
+        renderLoop();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
