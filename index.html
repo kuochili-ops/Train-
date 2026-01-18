@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影功能完全修復版</title>
+    <title>地鐵 3D - 錄影修復與空間擴展版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -50,10 +50,10 @@
 
 <script>
 const App = {
-    // 修正：左下角 y 往下一點點 (0.58 -> 0.61)，右下角維持上拉後的 0.78
+    // 修正：x 往左推 (0.12)，左下 y 往下一點點 (0.63)
     pts: [
-        {x: 0.18, y: 0.36}, {x: 0.94, y: 0.22}, 
-        {x: 0.94, y: 0.78}, {x: 0.18, y: 0.61}
+        {x: 0.12, y: 0.36}, {x: 0.94, y: 0.22}, 
+        {x: 0.94, y: 0.78}, {x: 0.12, y: 0.63}
     ],
     timing: { start: 2.55, end: 3.83, hide: 4.70 }, 
 
@@ -78,13 +78,13 @@ const App = {
 
     renderText: function() {
         this.cvs.width = 1800; this.cvs.height = 800;
-        const txt = document.getElementById('userInput').value || "白六㊗️大家新年快樂";
+        const txt = document.getElementById('userInput').value || "白六㊗️大家新年快樂唷";
         const bgColor = document.getElementById('bgColor').value;
         const textColor = document.getElementById('textColor').value;
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
         
-        let lines = (txt.length > 7) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
+        let lines = (txt.length > 8) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
         this.ctx.translate(1750, 400); 
         this.ctx.textAlign = 'right';
         this.ctx.textBaseline = 'middle';
@@ -131,48 +131,43 @@ const App = {
 
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
-        btn.disabled = true; btn.innerText = "錄製中...";
+        btn.disabled = true; btn.innerText = "錄製準備中...";
         
         const vW = this.v.videoWidth || 720;
         const vH = this.v.videoHeight || 1280;
         const exportCvs = document.createElement('canvas');
         exportCvs.width = vW; exportCvs.height = vH;
-        const eCtx = exportCvs.getContext('2d');
+        const eCtx = exportCvs.getContext('2d', {alpha: false});
         
         const stream = exportCvs.captureStream(30);
-        const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 15000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 10000000 });
         const chunks = [];
         
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: mime });
+            const blob = new Blob(chunks, { type: 'video/webm' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Metro_Capture.${mime.split('/')[1]}`; a.click();
+            a.download = `Metro_Export.webm`; a.click();
             btn.disabled = false; btn.innerText = "穩定錄製導出";
         };
 
         this.v.currentTime = 0;
         await this.v.play();
         recorder.start();
+        btn.innerText = "錄製中...";
 
-        const captureLoop = () => {
+        const renderFrame = () => {
             if (recorder.state === "recording") {
                 const t = this.v.currentTime;
-                eCtx.clearRect(0, 0, vW, vH);
                 eCtx.drawImage(this.v, 0, 0, vW, vH);
                 
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
-                    // 修正：錄影畫布必須重新計算基於影片解析度的矩陣
                     const p = this.pts.map(pt => ({ x: pt.x * vW, y: pt.y * vH }));
                     const mRec = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-                    
-                    // 套用轉換
                     eCtx.setTransform(mRec[0], mRec[1], mRec[4], mRec[5], mRec[12], mRec[13]);
                     
-                    // 處理 ClipPath 效果
                     const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
                     const clipX = 1800 * (1 - prog);
                     eCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
@@ -182,10 +177,10 @@ const App = {
                 if (t >= 4.8) eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
 
                 if (this.v.ended || t > 5.5) recorder.stop();
-                else requestAnimationFrame(captureLoop);
+                else requestAnimationFrame(renderFrame);
             }
         };
-        captureLoop();
+        renderFrame();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
