@@ -3,75 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 實時鏡像錄製版</title>
+    <title>地鐵 3D - 穩定錄影版</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        
-        /* 預覽容器：錄影會完全複製這裡的內容 */
-        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-        
-        video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
-        
+        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; }
+        video#v { width: 100%; height: 100%; object-fit: cover; }
         #canvas-text { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2; pointer-events: none;
             clip-path: inset(0 0 0 100%);
         }
-        
-        #kuo-logo { 
-            position: absolute; bottom: 20px; right: 20px; width: 100px; z-index: 99; 
-            opacity: 0; transition: opacity 0.5s; pointer-events: none;
-        }
-
-        .ui-bar { background: rgba(0,0,0,0.9); padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); }
-        .row { display: flex; gap: 10px; align-items: center; justify-content: center; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
-        
-        /* 錄製按鈕樣式 */
-        .rec-btn { width: 60px; height: 60px; border: 4px solid #fff; background: #ff0000; border-radius: 50%; cursor: pointer; transition: transform 0.2s; }
+        .ui-bar { background: #000; padding: 15px; display: flex; flex-direction: column; gap: 15px; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
+        .row { display: flex; gap: 10px; align-items: center; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 15px; border-radius: 12px; font-size: 16px; }
+        .rec-btn { width: 65px; height: 65px; border: 5px solid #fff; background: #ff3b30; border-radius: 50%; cursor: pointer; margin: 0 auto; display: block; position: relative; }
         .rec-btn:active { transform: scale(0.9); }
-        #stop-hint { position: fixed; top: 40px; left: 50%; transform: translateX(-50%); background: #ff0000; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; display: none; z-index: 1000; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.5; } }
+        #rec-hint { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); background: rgba(255, 0, 0, 0.8); color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; display: none; z-index: 1000; font-size: 14px; white-space: nowrap; }
     </style>
 </head>
 <body>
 
-<div id="stop-hint">● 正在錄製中...播完自動結束</div>
+<div id="rec-hint">● 正在錄製...請等待自動結束</div>
 
 <div class="app-container">
-    <div class="viewport" id="capture-zone">
+    <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
-        <canvas id="text-source" style="display:none;"></canvas>
         <img id="canvas-text">
-        <img id="kuo-logo" src="IMG_6604.png">
     </div>
 
-    <div class="ui-bar">
+    <div class="ui-bar" id="ui">
         <div class="row">
-            <input type="text" id="userInput" placeholder="輸入新年快樂..." oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入新年祝賀文字..." oninput="App.renderText()">
             <input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
         </div>
         <div class="row">
-            <div class="rec-btn" id="recTrigger" onclick="App.startRecording()"></div>
+            <button class="rec-btn" id="recBtn" onclick="App.startRecording()"></button>
         </div>
     </div>
 </div>
 
+<canvas id="text-canvas" style="display:none;"></canvas>
+
 <script>
 const App = {
-    // 座標固定百分比 (基於預覽區域)
     pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
-    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35, stop: 5.8 },
+    timing: { start: 2.55, end: 3.83, hide: 5.35, stop: 5.8 },
     isRecording: false,
 
     init: function() {
         this.v = document.getElementById('v');
         this.img = document.getElementById('canvas-text');
-        this.txtCvs = document.getElementById('text-source');
-        this.logo = document.getElementById('kuo-logo');
-        this.zone = document.getElementById('capture-zone');
+        this.txtCvs = document.getElementById('text-canvas');
         this.ctx = this.txtCvs.getContext('2d');
+        this.stage = document.getElementById('stage');
         
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
@@ -80,7 +65,7 @@ const App = {
     },
 
     updateWarp: function() {
-        const r = this.zone.getBoundingClientRect();
+        const r = this.stage.getBoundingClientRect();
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
         const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${m.join(',')})`;
@@ -93,79 +78,83 @@ const App = {
         this.ctx.save();
         this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle';
         this.ctx.fillStyle = document.getElementById('textColor').value;
-        this.ctx.font = '900 300px sans-serif';
-        this.ctx.scale(0.85, 2.0); // 模擬透視壓扁感
+        this.ctx.font = '900 320px sans-serif';
+        this.ctx.scale(0.8, 1.8);
         this.ctx.fillText(txt, 0, 0);
         this.ctx.restore();
         this.img.src = this.txtCvs.toDataURL();
     },
 
     animate: function() {
+        if(this.isRecording) return;
         const t = this.v.currentTime;
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
-        this.logo.style.opacity = (t >= this.timing.logoStart && t < 5.8) ? '1' : '0';
-        if(!this.isRecording) requestAnimationFrame(() => this.animate());
+        requestAnimationFrame(() => this.animate());
     },
 
-    // 🔴 關鍵錄製邏輯：直接抓取 DOM 元素的實時渲染
     startRecording: function() {
         if(this.isRecording) return;
         this.isRecording = true;
-        document.getElementById('stop-hint').style.display = 'block';
-        
-        const dpr = window.devicePixelRatio || 1;
+        document.getElementById('rec-hint').style.display = 'block';
+        document.getElementById('ui').style.opacity = '0.3';
+        document.getElementById('ui').style.pointerEvents = 'none';
+
+        const dpr = 2; // 手機端建議強制 2 倍 DPR 兼顧畫質與效能
         const outCanvas = document.createElement('canvas');
-        outCanvas.width = this.zone.clientWidth * dpr;
-        outCanvas.height = this.zone.clientHeight * dpr;
+        const w = this.stage.clientWidth;
+        const h = this.stage.clientHeight;
+        outCanvas.width = w * dpr;
+        outCanvas.height = h * dpr;
         const outCtx = outCanvas.getContext('2d');
 
         const stream = outCanvas.captureStream(30);
-        this.recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        this.recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
         this.chunks = [];
+
         this.recorder.ondataavailable = e => this.chunks.push(e.data);
         this.recorder.onstop = () => {
             const b = new Blob(this.chunks, { type: 'video/webm' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'Metro_Kuo_Method.webm'; a.click();
-            document.getElementById('stop-hint').style.display = 'none';
+            const url = URL.createObjectURL(b);
+            const a = document.createElement('a'); a.href = url; a.download = 'NewYear_Metro.webm'; a.click();
+            
+            // 重置狀態
             this.isRecording = false;
+            document.getElementById('rec-hint').style.display = 'none';
+            document.getElementById('ui').style.opacity = '1';
+            document.getElementById('ui').style.pointerEvents = 'auto';
             this.v.loop = true;
             this.animate();
         };
 
-        const drawFrame = () => {
+        const renderLoop = () => {
             if(!this.isRecording) return;
             const t = this.v.currentTime;
 
-            // 1. 先畫背景影片
-            outCtx.drawImage(this.v, 0, 0, outCanvas.width, outCanvas.height);
+            // 1. 畫背景
+            const vRatio = this.v.videoWidth / this.v.videoHeight;
+            const sRatio = outCanvas.width / outCanvas.height;
+            let dW, dH, dX, dY;
+            if (sRatio > vRatio) { dW = outCanvas.width; dH = outCanvas.width / vRatio; dX = 0; dY = (outCanvas.height - dH) / 2; }
+            else { dH = outCanvas.height; dW = outCanvas.height * vRatio; dX = (outCanvas.width - dW) / 2; dY = 0; }
+            outCtx.drawImage(this.v, dX, dY, dW, dH);
 
-            // 2. 核心：直接抓取文字標籤的「當前計算後的位置」畫上去
-            const r = this.img.getBoundingClientRect();
-            const zoneR = this.zone.getBoundingClientRect();
-            
+            // 2. 畫文字
             if (t >= this.timing.start && t < this.timing.hide) {
+                const p = this.pts.map(pt => ({ x: pt.x * outCanvas.width, y: pt.y * outCanvas.height }));
+                const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
                 outCtx.save();
-                // 使用 matrix3d 進行鏡像繪製
-                const m = this.matrixArr || this.calcMatrixForRec(outCanvas.width, outCanvas.height);
                 outCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
-                
                 const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
                 const clipX = 1800 * (1 - prog);
                 outCtx.drawImage(this.txtCvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
                 outCtx.restore();
             }
 
-            // 3. 畫 Logo
-            if (t >= this.timing.logoStart && t < 5.8) {
-                const lSize = 100 * dpr;
-                outCtx.drawImage(this.logo, outCanvas.width - lSize - 20*dpr, outCanvas.height - lSize - 20*dpr, lSize, lSize);
-            }
-
             if (t >= this.timing.stop) {
                 this.recorder.stop();
             } else {
-                requestAnimationFrame(drawFrame);
+                requestAnimationFrame(renderLoop);
             }
         };
 
@@ -174,13 +163,8 @@ const App = {
         this.v.loop = false;
         this.v.play().then(() => {
             this.recorder.start();
-            drawFrame();
+            renderLoop();
         });
-    },
-
-    calcMatrixForRec: function(w, h) {
-        const p = this.pts.map(pt => ({ x: pt.x * w, y: pt.y * h }));
-        return this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
