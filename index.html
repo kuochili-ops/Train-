@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 深度透視最終版</title>
+    <title>地鐵 3D - 解決縱切問題版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -23,7 +23,6 @@
         button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
         .rec-btn { background: #E02020; color: white; }
-        span { opacity: 0.7; font-size: 11px; }
     </style>
 </head>
 <body>
@@ -38,7 +37,6 @@
         <div class="row">
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
             底：<input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
-            <span>(黑為透明)</span>
             <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
         </div>
         <div class="btn-row">
@@ -52,12 +50,13 @@
 
 <script>
 const App = {
-    // 修正：左右下方定位點全面往下壓，增加透視縱深 [cite: 2026-01-18]
+    // 修正：將左側座標 x 從 0.08 往右移至 0.18，徹底避開列車行進軌跡
     pts: [
-        {x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, 
-        {x: 0.94, y: 0.85}, {x: 0.08, y: 0.62}
+        {x: 0.18, y: 0.36}, {x: 0.94, y: 0.22}, 
+        {x: 0.94, y: 0.85}, {x: 0.18, y: 0.58}
     ],
-    timing: { start: 2.55, end: 3.83, hide: 4.85 }, 
+    // 修正：提早在 4.70 秒消失，確保車頭出現前看板已離場
+    timing: { start: 2.55, end: 3.83, hide: 4.70 }, 
 
     init: function() {
         this.v = document.getElementById('v');
@@ -83,25 +82,16 @@ const App = {
         const txt = document.getElementById('userInput').value || "白六㊗️大家新年快樂";
         const bgColor = document.getElementById('bgColor').value;
         const textColor = document.getElementById('textColor').value;
-        
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
         
-        let lines = [];
-        if (txt.length > 7) {
-            lines.push(txt.substring(0, Math.ceil(txt.length/2)));
-            lines.push(txt.substring(Math.ceil(txt.length/2)));
-        } else {
-            lines.push(txt);
-        }
+        let lines = (txt.length > 7) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
 
-        // 定位到右側起點 [cite: 2026-01-18]
         this.ctx.translate(1750, 400); 
         this.ctx.textAlign = 'right';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillStyle = textColor;
 
-        // 背景繪製
         if (bgColor !== "#000000") {
             this.ctx.save();
             this.ctx.fillStyle = bgColor + "E6";
@@ -117,18 +107,15 @@ const App = {
         }
 
         if (lines.length === 1) {
-            // 單行模式增加垂直縮放，對應更長的看板高度 [cite: 2026-01-18]
             this.ctx.scale(0.85, 2.2); 
             this.ctx.font = '900 350px sans-serif';
             this.ctx.fillText(lines[0], 0, 0);
         } else {
-            // 雙行模式垂直縮放微調 [cite: 2026-01-18]
             this.ctx.scale(0.85, 1.4); 
             this.ctx.font = '900 240px sans-serif';
             this.ctx.fillText(lines[0], 0, -120);
             this.ctx.fillText(lines[1], 0, 120);
         }
-        
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
     },
@@ -137,6 +124,7 @@ const App = {
 
     animate: function() {
         const t = this.v.currentTime;
+        // 核心邏輯：時間一到立刻切斷顯示
         this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
         this.logo.style.opacity = (t >= 4.8) ? '1' : '0';
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
@@ -160,18 +148,18 @@ const App = {
             const blob = new Blob(chunks, { type: mime });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Subway_DeepPerspective.${mime.split('/')[1]}`; a.click();
+            a.download = `Subway_Fix.${mime.split('/')[1]}`; a.click();
             btn.disabled = false; btn.innerText = "穩定錄製導出";
             this.v.loop = true;
         };
-        this.v.loop = false;
-        this.v.currentTime = 0;
+        this.v.loop = false; this.v.currentTime = 0;
         await this.v.play();
         recorder.start();
         const captureLoop = () => {
             if (recorder.state === "recording") {
                 const t = this.v.currentTime;
                 eCtx.drawImage(this.v, 0, 0, exportCvs.width, exportCvs.height);
+                // 錄製時也嚴格遵守隱藏時間
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
                     const s = exportCvs.width / 1800;
