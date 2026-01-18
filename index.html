@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 文字完整修正版</title>
+    <title>地鐵 3D - 透視重調版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -36,7 +36,7 @@
         <div class="row">
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
             底：<input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
-            <input type="text" id="userInput" placeholder="白六㊗️大家新年快樂" oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
         </div>
         <div class="btn-row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
@@ -49,12 +49,12 @@
 
 <script>
 const App = {
-    // 修正：將左側 x 座標往左拉 (0.22 -> 0.08)，利用左邊剩餘空間
+    // 核心修正：將右下角點 (pts[2].y) 調大，讓透視向下延伸
     pts: [
-        {x: 0.08, y: 0.35}, {x: 0.94, y: 0.24}, 
-        {x: 0.94, y: 0.65}, {x: 0.08, y: 0.58}
+        {x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, 
+        {x: 0.94, y: 0.75}, {x: 0.08, y: 0.60}
     ],
-    timing: { start: 2.55, end: 3.83, hide: 4.8 }, 
+    timing: { start: 2.55, end: 3.83, hide: 4.85 }, 
 
     init: function() {
         this.v = document.getElementById('v');
@@ -71,6 +71,7 @@ const App = {
     updateWarp: function() {
         const r = document.getElementById('stage').getBoundingClientRect();
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
+        // 計算 3D 矩陣
         this.m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${this.m.join(',')})`;
     },
@@ -81,17 +82,16 @@ const App = {
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
         
-        // 修正：文字對齊改為靠左 (left)，從座標 50 開始畫，確保「白」字不被切掉
+        // 文字拉伸修正：垂直比例增加以對應更深的透視
         this.ctx.translate(50, 400); 
-        this.ctx.scale(0.8, 1.6); // 調整比例讓字更飽滿
+        this.ctx.scale(0.85, 1.8); 
         this.ctx.textAlign = 'left'; 
         this.ctx.textBaseline = 'middle';
-        this.ctx.font = '900 320px sans-serif';
+        this.ctx.font = '900 350px sans-serif';
         
         const tw = this.ctx.measureText(txt).width;
         this.ctx.fillStyle = document.getElementById('bgColor').value + "E6";
-        // 背景圓角矩形也改為向右延伸
-        this.ctx.roundRect(-20, -220, tw + 100, 440, 30);
+        this.ctx.roundRect(-40, -210, tw + 120, 420, 20);
         this.ctx.fill();
         
         this.ctx.fillStyle = document.getElementById('textColor').value;
@@ -114,32 +114,27 @@ const App = {
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
         btn.disabled = true; btn.innerText = "錄製中...";
-        
         const exportCvs = document.createElement('canvas');
         exportCvs.width = this.v.videoWidth || 720;
         exportCvs.height = this.v.videoHeight || 1280;
         const eCtx = exportCvs.getContext('2d');
-        
         const stream = exportCvs.captureStream(30);
         const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 6000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 8000000 });
         const chunks = [];
-        
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: mime });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Subway_NewYear.${mime.split('/')[1]}`; a.click();
+            a.download = `Subway_Perspective.${mime.split('/')[1]}`; a.click();
             btn.disabled = false; btn.innerText = "穩定錄製導出";
             this.v.loop = true;
         };
-
         this.v.loop = false;
         this.v.currentTime = 0;
         await this.v.play();
         recorder.start();
-
         const captureLoop = () => {
             if (recorder.state === "recording") {
                 const t = this.v.currentTime;
@@ -152,7 +147,6 @@ const App = {
                     eCtx.restore();
                 }
                 if (t >= 4.8) eCtx.drawImage(this.logo, exportCvs.width-130, exportCvs.height-130, 100, 100);
-
                 if (this.v.ended || t > 5.6) recorder.stop();
                 else requestAnimationFrame(captureLoop);
             }
