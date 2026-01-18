@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 縱比自適應版</title>
+    <title>地鐵 3D - 專業分享版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
@@ -24,8 +24,11 @@
             background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; 
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             padding-bottom: calc(var(--safe-bottom) + 5px);
+            position: relative; z-index: 100;
         }
-        .ui-hide { transform: translateY(100%); position: absolute; bottom: 0; width: 100%; visibility: hidden; }
+        /* 隱藏狀態：位移並調整高度避免佔用空間 */
+        .ui-hide { transform: translateY(100%); position: absolute; bottom: 0; width: 100%; visibility: hidden; pointer-events: none; }
+        
         .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 13px; }
         input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
         input[type="color"] { width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
@@ -50,7 +53,7 @@
             <input type="text" id="userInput" placeholder="輸入文字..." value="新年快樂" oninput="App.renderText()">
         </div>
         <div class="btn-row">
-            <button class="share-btn" onclick="App.copyShareLink()">分享連結</button>
+            <button class="share-btn" onclick="App.copyShareLink()">複製分享連結</button>
             <button class="preview-btn" onclick="App.toggleUI(true)">進入展示模式</button>
         </div>
     </div>
@@ -75,7 +78,11 @@ const App = {
         if(params.has('t')) document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
         if(params.has('tc')) document.getElementById('textColor').value = '#' + params.get('tc');
         if(params.has('bc')) document.getElementById('bgColor').value = '#' + params.get('bc');
-        if(params.get('m') === 's') setTimeout(() => this.toggleUI(true), 500);
+        
+        // 若網址帶有 m=s，直接隱藏 UI
+        if(params.get('m') === 's') {
+            document.getElementById('ui').classList.add('ui-hide');
+        }
 
         window.addEventListener('resize', () => this.updateWarp());
         this.v.onloadedmetadata = () => this.updateWarp();
@@ -83,13 +90,15 @@ const App = {
         this.renderText();
         this.v.play();
         this.animate();
+        
+        // 確保初次載入時座標正確
+        setTimeout(() => this.updateWarp(), 300);
     },
 
     updateWarp: function() {
         const vw = this.v.videoWidth || 1920, vh = this.v.videoHeight || 1080;
         const rect = document.getElementById('stage').getBoundingClientRect();
         
-        // 核心邏輯：計算 object-fit: cover 造成的位移與縮放比例
         const vRatio = vw / vh;
         const sRatio = rect.width / rect.height;
         let scale, ox = 0, oy = 0;
@@ -102,7 +111,6 @@ const App = {
             ox = (rect.width - vw * scale) / 2;
         }
 
-        // 將原始座標映射到當前裁切後的畫面
         const p = this.rawPts.map(pt => ({
             x: pt.x * vw * scale + ox,
             y: pt.y * vh * scale + oy
@@ -148,21 +156,22 @@ const App = {
 
     toggleUI: function(forceHide = false) {
         const ui = document.getElementById('ui');
-        const isHidden = ui.classList.contains('ui-hide');
-        if(forceHide || !isHidden) ui.classList.add('ui-hide');
-        else ui.classList.remove('ui-hide');
+        if(forceHide) ui.classList.add('ui-hide');
+        else ui.classList.toggle('ui-hide');
         
-        // 比例改變後延遲重新校準透視
-        setTimeout(() => this.updateWarp(), 100);
+        // 切換 UI 會改變 Viewport 大小，需重新校準
+        setTimeout(() => this.updateWarp(), 150);
     },
 
     copyShareLink: function() {
         const t = encodeURIComponent(document.getElementById('userInput').value);
         const tc = document.getElementById('textColor').value.replace('#','');
         const bc = document.getElementById('bgColor').value.replace('#','');
+        // 加入 m=s 參數，讓對方點開就直接是展示模式
         const url = `${window.location.origin}${window.location.pathname}?t=${t}&tc=${tc}&bc=${bc}&m=s`;
+        
         navigator.clipboard.writeText(url).then(() => {
-            alert('分享連結已複製！');
+            alert('分享連結已複製！對方開啟時會直接隱藏介面。');
             this.toggleUI(true);
         });
     },
