@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 最終修正錄製版</title>
+    <title>地鐵 3D 最終 Pro 穩定錄製版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 2200px; }
-        video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; pointer-events: none; }
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2; clip-path: inset(0 0 0 100%); mix-blend-mode: normal; pointer-events: none;
@@ -17,14 +17,18 @@
         .ui-bar { background: rgba(10, 10, 10, 0.95); padding: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; border-top: 1px solid #333; }
         .row { display: flex; gap: 8px; align-items: center; }
         .col { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #888; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; font-size: 14px; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; font-size: 14px; outline: none; }
         input[type="color"] { width: 35px; height: 35px; border: none; background: none; cursor: pointer; }
-        button { flex: 1; padding: 10px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; }
+        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
         .preview-btn { background: #333; color: white; }
         .rec-btn { background: #E02020; color: #fff; }
+        .rec-btn:disabled { background: #555; cursor: not-allowed; }
+        #status-msg { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); font-size: 12px; background: rgba(0,0,0,0.7); padding: 5px 15px; border-radius: 20px; z-index: 2000; opacity: 0; transition: 0.3s; }
     </style>
 </head>
 <body>
+
+<div id="status-msg"></div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
@@ -40,7 +44,7 @@
         </div>
         <div class="row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
-            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">開始導出錄製</button>
+            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">產生影片檔案</button>
         </div>
     </div>
 </div>
@@ -59,11 +63,14 @@ const App = {
         this.input = document.getElementById('userInput');
         this.colorPicker = document.getElementById('textColor');
         this.bgPicker = document.getElementById('bgColor');
+        this.status = document.getElementById('status-msg');
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.animate();
         this.renderOffscreenText();
     },
+
+    showStatus: function(msg) { this.status.innerText = msg; this.status.style.opacity = 1; },
 
     updateWarp: function() {
         const r = document.getElementById('stage').getBoundingClientRect();
@@ -124,46 +131,71 @@ const App = {
     },
 
     startCapture: async function() {
-        const btn = document.getElementById('recBtn'); btn.innerText = "錄製準備中..."; btn.disabled = true;
+        const btn = document.getElementById('recBtn');
+        btn.disabled = true;
+        this.showStatus("錄製啟動中...");
+        
         const exportCanvas = document.createElement('canvas'); 
         exportCanvas.width = 720; exportCanvas.height = 1280;
         const eCtx = exportCanvas.getContext('2d');
         
-        let mimeType = 'video/webm;codecs=vp9';
-        if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+        // 相容性檢查：嘗試不同格式 [cite: 2026-01-18]
+        const types = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm', 'video/vp8'];
+        let selectedType = types.find(t => MediaRecorder.isTypeSupported(t));
         
+        if (!selectedType) {
+            alert("此瀏覽器不支援錄影功能。");
+            btn.disabled = false;
+            return;
+        }
+
         const stream = exportCanvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType, bitsPerSecond: 10000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: selectedType, bitsPerSecond: 8000000 });
         const chunks = [];
+        
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Final_Metro_3D.webm`; a.click();
-            btn.innerText = "開始導出錄製"; btn.disabled = false;
+            const blob = new Blob(chunks, { type: selectedType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Metro_Video_${Date.now()}.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            btn.innerText = "完成導出";
+            btn.disabled = false;
+            this.status.style.opacity = 0;
         };
 
         this.v.currentTime = 0;
-        await this.v.play();
+        this.v.pause();
+        
+        // 確保影片加載後才開始 [cite: 2026-01-18]
+        await new Promise(r => setTimeout(r, 500));
+        this.v.play();
         recorder.start();
-        btn.innerText = "正在進行離屏合成...";
+        btn.innerText = "正在錄製...";
 
         const renderLoop = () => {
             if (recorder.state === "recording") {
-                // 1. 繪製底層影片
                 eCtx.drawImage(this.v, 0, 0, 720, 1280);
                 const cur = this.v.currentTime;
-                // 2. 繪製 3D 文字層
                 if (cur >= this.timing.start) {
                     const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
                     eCtx.save();
-                    // 固定錄製解析度 720x1280 下的矩陣縮放 [cite: 2026-01-18]
                     const scale = 720 / 1800; 
                     eCtx.setTransform(this.m[0]*scale, this.m[1]*scale, this.m[4]*scale, this.m[5]*scale, this.m[12]*scale, this.m[13]*scale);
                     eCtx.globalAlpha = prog;
                     eCtx.drawImage(document.getElementById('temp-cvs'), 0, 0);
                     eCtx.restore();
                 }
-                if (this.v.ended || cur > 5.4) recorder.stop(); else requestAnimationFrame(renderLoop);
+                if (this.v.ended || cur > 5.4) {
+                    recorder.stop();
+                    this.v.pause();
+                } else {
+                    requestAnimationFrame(renderLoop);
+                }
             }
         };
         renderLoop();
