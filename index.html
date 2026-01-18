@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影對位最終修正版</title>
+    <title>地鐵 3D - 綠板對位最終修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -49,9 +49,6 @@
 <canvas id="offscreen" style="display:none;"></canvas>
 
 <script>
-/**
- * Canvas 錄製模組 - KUO Flip-board Method
- */
 const CanvasRecorder = {
     recorder: null,
     chunks: [],
@@ -79,12 +76,12 @@ const CanvasRecorder = {
 };
 
 const App = {
-    // 定位點：針對錄製進行校準，pts[3].y 為 0.52
+    // 修正：x 移至 0.08 避開列車，y 移至 0.50 緊貼綠板
     pts: [
-        {x: 0.05, y: 0.38}, {x: 0.94, y: 0.22}, 
-        {x: 0.94, y: 0.78}, {x: 0.05, y: 0.52}
+        {x: 0.08, y: 0.38}, {x: 0.94, y: 0.22}, 
+        {x: 0.94, y: 0.78}, {x: 0.08, y: 0.50}
     ],
-    timing: { start: 2.55, end: 3.83, hide: 5.45, stop: 5.60 }, 
+    timing: { start: 2.55, end: 3.83, hide: 5.35, stop: 5.50 }, 
     isRecording: false,
 
     init: function() {
@@ -114,36 +111,20 @@ const App = {
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
         
-        // 恢復之前的文字處理邏輯
         let lines = (txt.length > 9) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
-        this.ctx.translate(1750, 400); 
-        this.ctx.textAlign = 'right';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.fillStyle = textColor;
+        this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
 
         if (bgColor !== "#000000") {
-            this.ctx.save();
-            this.ctx.fillStyle = bgColor + "E6";
-            let maxW = 0;
-            this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
-            lines.forEach(l => {
-                let w = this.ctx.measureText(l).width * 0.85;
-                if(w > maxW) maxW = w;
-            });
+            this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
+            let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+            lines.forEach(l => { let w = this.ctx.measureText(l).width * 0.85; if(w > maxW) maxW = w; });
             this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
-            this.ctx.fill();
-            this.ctx.restore();
+            this.ctx.fill(); this.ctx.restore();
         }
-
         if (lines.length === 1) {
-            this.ctx.scale(0.85, 2.0);
-            this.ctx.font = '900 350px sans-serif';
-            this.ctx.fillText(lines[0], 0, 0);
+            this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0);
         } else {
-            this.ctx.scale(0.85, 1.3); 
-            this.ctx.font = '900 240px sans-serif';
-            this.ctx.fillText(lines[0], 0, -120);
-            this.ctx.fillText(lines[1], 0, 120);
+            this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120);
         }
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
@@ -153,17 +134,18 @@ const App = {
 
     animate: function() {
         const t = this.v.currentTime;
-        this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
+        const isHidden = (t >= this.timing.hide);
+        this.img.style.display = isHidden ? 'none' : 'block';
         this.logo.style.opacity = (t >= 4.8) ? '1' : '0';
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
-        this.img.style.clipPath = (t < this.timing.start) ? 'inset(0 0 0 100%)' : (t > this.timing.hide ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`);
+        this.img.style.clipPath = (t < this.timing.start) ? 'inset(0 0 0 100%)' : (isHidden ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`);
         requestAnimationFrame(() => this.animate());
     },
 
     startCapture: async function() {
         if (this.isRecording) return;
         const btn = document.getElementById('recBtn');
-        this.isRecording = true; btn.disabled = true; btn.innerText = "正在精準導出...";
+        this.isRecording = true; btn.disabled = true; btn.innerText = "精準導出中...";
         
         const vW = this.v.videoWidth;
         const vH = this.v.videoHeight;
@@ -181,11 +163,10 @@ const App = {
                 
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
-                    // 關鍵修正：確保錄影矩陣計算時完全對齊影片原生解析度
                     const p = this.pts.map(pt => ({ x: pt.x * vW, y: pt.y * vH }));
                     const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
                     
-                    // 重置矩陣並套用校準後的 2D transform
+                    // 強制重置 transform 解決錄影偏移
                     eCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
                     
                     const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
@@ -196,7 +177,7 @@ const App = {
                 if (t >= 4.8) eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
 
                 if (t >= this.timing.stop || this.v.ended) {
-                    await CanvasRecorder.stop("Metro_Fixed_Perspective");
+                    await CanvasRecorder.stop("Metro_Calibration_Final");
                     this.isRecording = false; btn.disabled = false; btn.innerText = "穩定錄製導出"; this.v.loop = true;
                 } else {
                     requestAnimationFrame(renderFrame);
