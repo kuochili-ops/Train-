@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影同步修正版</title>
+    <title>地鐵 3D - 錄影與右下座標修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -50,10 +50,10 @@
 
 <script>
 const App = {
-    // 延續避開列車的座標與時間設定
+    // 修正：右下角 y 從 0.85 往上拉回 0.78
     pts: [
         {x: 0.18, y: 0.36}, {x: 0.94, y: 0.22}, 
-        {x: 0.94, y: 0.85}, {x: 0.18, y: 0.58}
+        {x: 0.94, y: 0.78}, {x: 0.18, y: 0.58}
     ],
     timing: { start: 2.55, end: 3.83, hide: 4.70 }, 
 
@@ -105,11 +105,11 @@ const App = {
         }
 
         if (lines.length === 1) {
-            this.ctx.scale(0.85, 2.2); 
+            this.ctx.scale(0.85, 2.0); // 配合座標拉回，稍微縮小垂直比例
             this.ctx.font = '900 350px sans-serif';
             this.ctx.fillText(lines[0], 0, 0);
         } else {
-            this.ctx.scale(0.85, 1.4); 
+            this.ctx.scale(0.85, 1.3); 
             this.ctx.font = '900 240px sans-serif';
             this.ctx.fillText(lines[0], 0, -120);
             this.ctx.fillText(lines[1], 0, 120);
@@ -134,9 +134,8 @@ const App = {
         btn.disabled = true; btn.innerText = "錄製中...";
         
         const exportCvs = document.createElement('canvas');
-        // 抓取影片原始寬高
-        const vW = this.v.videoWidth;
-        const vH = this.v.videoHeight;
+        const vW = this.v.videoWidth || 720;
+        const vH = this.v.videoHeight || 1280;
         exportCvs.width = vW;
         exportCvs.height = vH;
         const eCtx = exportCvs.getContext('2d');
@@ -151,12 +150,10 @@ const App = {
             const blob = new Blob(chunks, { type: mime });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Metro_Export.${mime.split('/')[1]}`; a.click();
+            a.download = `Metro_Final_Export.${mime.split('/')[1]}`; a.click();
             btn.disabled = false; btn.innerText = "穩定錄製導出";
-            this.v.loop = true;
         };
 
-        this.v.loop = false;
         this.v.currentTime = 0;
         await this.v.play();
         recorder.start();
@@ -164,30 +161,21 @@ const App = {
         const captureLoop = () => {
             if (recorder.state === "recording") {
                 const t = this.v.currentTime;
-                // 1. 畫背景影片
+                // 1. 畫背景
                 eCtx.drawImage(this.v, 0, 0, vW, vH);
                 
-                // 2. 畫文字看板 (修正：確保與預覽座標同步)
+                // 2. 直接繪製 3D 看板 (確保錄影中看得到文字)
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
-                    // 根據影片原始大小縮放矩陣
-                    const s = vW / 1800; 
-                    // 這裡的轉換必須匹配 calcMatrix 的導出結果
+                    const s = vW / 1800;
+                    // 直接應用計算出的矩陣到 Canvas 繪圖上下文
                     eCtx.setTransform(this.m[0]*s, this.m[1]*s, this.m[4]*s, this.m[5]*s, this.m[12]*s, this.m[13]*s);
                     eCtx.drawImage(this.cvs, 0, 0);
                     eCtx.restore();
                 }
-                
-                // 3. 畫 Logo
-                if (t >= 4.8) {
-                    eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
-                }
 
-                if (this.v.ended || t > 5.6) {
-                    recorder.stop();
-                } else {
-                    requestAnimationFrame(captureLoop);
-                }
+                if (this.v.ended || t > 5.5) recorder.stop();
+                else requestAnimationFrame(captureLoop);
             }
         };
         captureLoop();
