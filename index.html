@@ -3,46 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 最終完美版</title>
+    <title>地鐵 3D 最終 Pro 版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 2000px; }
         
         video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        
+        /* 看板顏色疊加層 */
+        #board-overlay {
+            position: absolute; top: 0; left: 0; width: 1800px; height: 800px;
+            z-index: 2; mix-blend-mode: overlay; opacity: 0.4; pointer-events: none;
+        }
+
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
-            transform-origin: 0 0; z-index: 2;
+            transform-origin: 0 0; z-index: 3;
             clip-path: inset(0 0 0 100%); 
-            mix-blend-mode: multiply; opacity: 0.95;
+            mix-blend-mode: normal; opacity: 1;
             pointer-events: none;
         }
 
         #kuo-end-img {
-            position: absolute; bottom: 25px; right: 25px; width: 125px;
+            position: absolute; bottom: 25px; right: 25px; width: 120px;
             z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen;
         }
 
         .ui-bar { 
-            background: rgba(15, 15, 15, 0.98); padding: 15px; 
-            display: flex; flex-direction: column; gap: 10px; 
+            background: rgba(10, 10, 10, 0.95); padding: 12px; 
+            display: flex; flex-direction: column; gap: 8px; 
             z-index: 1000; border-top: 1px solid #333;
-            transition: transform 0.4s ease;
         }
-        .ui-bar.collapsed { transform: translateY(100%); position: absolute; bottom: 0; width: 100%; }
-
-        .row { display: flex; gap: 12px; align-items: center; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
+        .row { display: flex; gap: 8px; align-items: center; }
+        .col { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #888; }
         
-        /* 顏色選擇器優化 */
-        .color-box { width: 45px; height: 45px; border-radius: 50%; border: 2px solid #fff; overflow: hidden; cursor: pointer; flex-shrink: 0; }
-        input[type="color"] { width: 60px; height: 60px; transform: translate(-8px, -8px); cursor: pointer; border: none; background: none; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; font-size: 14px; }
+        input[type="color"] { width: 35px; height: 35px; border: none; background: none; cursor: pointer; }
         
-        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+        button { flex: 1; padding: 10px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
-        .share-btn { background: #007AFF; color: white; }
         .rec-btn { background: #E02020; color: #fff; }
-        .toggle-ui { position: absolute; top: -35px; right: 20px; background: #111; color: #888; padding: 4px 15px; border-radius: 8px 8px 0 0; font-size: 11px; border: 1px solid #333; }
     </style>
 </head>
 <body>
@@ -50,22 +51,26 @@
 <div class="app-container">
     <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
+        <div id="board-overlay"></div>
         <img id="canvas-image">
         <img id="kuo-end-img" src="IMG_6604.png">
     </div>
 
     <div class="ui-bar" id="mainUI">
-        <button class="toggle-ui" onclick="document.getElementById('mainUI').classList.toggle('collapsed')">收合介面</button>
         <div class="row">
-            <div class="color-box">
-                <input type="color" id="textColor" value="#000000" oninput="App.renderOffscreenText()">
+            <div class="col">
+                <input type="color" id="textColor" value="#ffffff" oninput="App.renderOffscreenText()">
+                文字
             </div>
-            <input type="text" id="userInput" placeholder="輸入文字 (高度已縮小 / 位置上移)" oninput="App.renderOffscreenText()">
+            <div class="col">
+                <input type="color" id="bgColor" value="#000000" oninput="App.renderOffscreenText()">
+                底色
+            </div>
+            <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderOffscreenText()">
         </div>
         <div class="row">
-            <button class="preview-btn" onclick="App.play()">預覽效果</button>
-            <button class="share-btn" onclick="App.generateShareUrl()">產生連結</button>
-            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">錄製導出</button>
+            <button class="preview-btn" onclick="App.play()">預覽</button>
+            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">穩定錄製並導出</button>
         </div>
     </div>
 </div>
@@ -86,11 +91,12 @@ const App = {
         this.logoImg = document.getElementById('kuo-end-img');
         this.input = document.getElementById('userInput');
         this.colorPicker = document.getElementById('textColor');
+        this.bgPicker = document.getElementById('bgColor');
         
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.animate();
-        this.renderOffscreenText(); // 初始渲染
+        this.renderOffscreenText();
     },
 
     updateWarp: function() {
@@ -99,6 +105,7 @@ const App = {
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
         this.m = this.calcMatrix(0,0, w,0, w,h, 0,h, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${this.m.join(',')})`;
+        document.getElementById('board-overlay').style.transform = `matrix3d(${this.m.join(',')})`;
     },
 
     play: function() {
@@ -120,8 +127,7 @@ const App = {
         for (let char of rawText) {
             let cLen = char.charCodeAt(0) < 128 ? 0.5 : 1;
             if (currentLen + cLen > 6.2) {
-                lines.push(currentLine);
-                currentLine = char; currentLen = cLen;
+                lines.push(currentLine); currentLine = char; currentLen = cLen;
             } else {
                 currentLine += char; currentLen += cLen;
             }
@@ -129,32 +135,90 @@ const App = {
         if (currentLine) lines.push(currentLine);
 
         let lineCount = lines.length;
-        let baseSize = 430; 
-        let finalSize = baseSize / (lineCount > 1 ? (lineCount * 0.82) : 1);
-        
-        let stretchX = lineCount > 1 ? 0.50 : 0.60; 
-        let stretchY = 1.55; 
+        let baseSize = 420; 
+        let finalSize = baseSize / (lineCount > 1 ? (lineCount * 0.85) : 1);
+        let stretchX = lineCount > 1 ? 0.52 : 0.62; 
+        let stretchY = 1.6;
 
         ctx.save();
-        // 修正：Y 座標從 400 改為 380，將文字整體上移一點點 [cite: 2026-01-18]
-        ctx.translate(1795, 380); 
+        ctx.translate(1795, 385); 
         ctx.scale(stretchX, stretchY); 
-
-        ctx.fillStyle = this.colorPicker.value; // 字體顏色可動態選擇 [cite: 2026-01-18]
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.font = `900 ${finalSize}px "Impact", "Arial Black", sans-serif`;
+        ctx.font = `900 ${finalSize}px "Impact", sans-serif`;
 
         lines.forEach((line, i) => {
-            const spacing = finalSize * 1.35;
-            const yOffset = (i - (lineCount - 1) / 2) * spacing;
-            ctx.fillText(line, 0, yOffset / stretchY);
+            const spacing = finalSize * 1.3;
+            const y = (i - (lineCount - 1) / 2) * spacing;
+            const tw = ctx.measureText(line).width;
+
+            // 繪製文字底色塊 [cite: 2026-01-18]
+            ctx.fillStyle = this.bgPicker.value + "CC"; // 80% 透明
+            ctx.roundRect(-tw - 20, (y/stretchY) - (finalSize/2), tw + 40, finalSize, 20);
+            ctx.fill();
+
+            // 繪製文字
+            ctx.fillStyle = this.colorPicker.value;
+            ctx.fillText(line, 0, y / stretchY);
         });
         ctx.restore();
         this.img.src = cvs.toDataURL();
     },
 
-    // 矩陣計算與錄製邏輯保持不變...
+    animate: function() {
+        const cur = this.v.currentTime;
+        this.logoImg.style.opacity = (cur >= (this.v.duration || 5.5) - 1.8) ? '1' : '0';
+        const prog = Math.max(0, Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start)));
+        this.img.style.clipPath = (cur < this.timing.start) ? 'inset(0 0 0 100%)' : (cur > this.timing.end ? 'inset(0 0 0 0%)' : `inset(0 0 0 ${100 - prog*100}%)`);
+        requestAnimationFrame(() => this.animate());
+    },
+
+    startCapture: async function() {
+        const btn = document.getElementById('recBtn'); btn.innerText = "錄製中..."; btn.disabled = true;
+        this.renderOffscreenText();
+        
+        const exportCanvas = document.createElement('canvas'); 
+        exportCanvas.width = 720; exportCanvas.height = 1280;
+        const eCtx = exportCanvas.getContext('2d');
+        
+        const stream = exportCanvas.captureStream(30);
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 8000000 });
+        const chunks = [];
+        
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Metro_3D.webm`; a.click();
+            btn.innerText = "穩定錄製並導出"; btn.disabled = false;
+        };
+
+        this.v.currentTime = 0;
+        await this.v.play();
+        recorder.start();
+
+        const renderLoop = () => {
+            if (recorder.state === "recording") {
+                eCtx.drawImage(this.v, 0, 0, 720, 1280);
+                const cur = this.v.currentTime;
+                if (cur >= this.timing.start) {
+                    const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
+                    eCtx.save();
+                    const r = this.v.getBoundingClientRect();
+                    const scale = 720 / r.width;
+                    eCtx.scale(scale, scale);
+                    // 修正：錄製時手動繪製 3D 投影圖層以確保穩定 [cite: 2026-01-18]
+                    eCtx.setTransform(this.m[0]*scale, this.m[1]*scale, this.m[4]*scale, this.m[5]*scale, this.m[12]*scale, this.m[13]*scale);
+                    eCtx.globalAlpha = prog;
+                    eCtx.drawImage(document.getElementById('temp-cvs'), 0, 0);
+                    eCtx.restore();
+                }
+                if (this.v.ended || cur > 5.4) recorder.stop();
+                else requestAnimationFrame(renderLoop);
+            }
+        };
+        renderLoop();
+    },
+
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
         const a = [[x1,y1,1,0,0,0,-px1*x1,-px1*y1],[0,0,0,x1,y1,1,-py1*x1,-py1*y1],[x2,y2,1,0,0,0,-px2*x2,-px2*y2],[0,0,0,x2,y2,1,-py2*x2,-py2*y2],[x3,y3,1,0,0,0,-px3*x3,-px3*y3],[0,0,0,x3,y3,1,-py3*x3,-py3*y3],[x4,y4,1,0,0,0,-px4*x4,-px4*y4],[0,0,0,x4,y4,1,-py4*x4,-py4*y4]];
         const b = [px1,py1,px2,py2,px3,py3,px4,py4];
@@ -172,41 +236,6 @@ const App = {
             x[i]=(b[i]-s)/a[i][i];
         }
         return [x[0],x[3],0,x[6],x[1],x[4],0,x[7],0,0,1,0,x[2],x[5],0,1];
-    },
-    animate: function() {
-        const cur = this.v.currentTime;
-        this.logoImg.style.opacity = (cur >= (this.v.duration || 5.5) - 1.8) ? '1' : '0';
-        const prog = Math.max(0, Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start)));
-        this.img.style.clipPath = (cur < this.timing.start) ? 'inset(0 0 0 100%)' : (cur > this.timing.end ? 'inset(0 0 0 0%)' : `inset(0 0 0 ${100 - prog*100}%)`);
-        requestAnimationFrame(() => this.animate());
-    },
-    startCapture: async function() {
-        const btn = document.getElementById('recBtn'); btn.innerText = "●"; btn.disabled = true;
-        this.renderOffscreenText();
-        const exportCanvas = document.createElement('canvas'); exportCanvas.width = 720; exportCanvas.height = 1280;
-        const eCtx = exportCanvas.getContext('2d'); const stream = exportCanvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 12000000 });
-        const chunks = []; recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Final_Subway_3D.webm`; a.click();
-            btn.innerText = "錄製導出"; btn.disabled = false;
-        };
-        this.v.currentTime = 0; await this.v.play(); recorder.start();
-        const renderLoop = () => {
-            if (recorder.state === "recording") {
-                eCtx.drawImage(this.v, 0, 0, 720, 1280);
-                const cur = this.v.currentTime;
-                if (cur >= this.timing.start) {
-                    const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
-                    eCtx.save(); eCtx.beginPath(); eCtx.rect(720 * (1 - prog), 0, 720, 1280); eCtx.clip();
-                    const r = document.getElementById('stage').getBoundingClientRect();
-                    eCtx.setTransform(this.m[0]*(720/r.width), this.m[1]*(1280/r.height), this.m[4]*(720/r.width), this.m[5]*(1280/r.height), this.m[12]*(720/r.width), this.m[13]*(1280/r.height));
-                    eCtx.drawImage(document.getElementById('temp-cvs'), 0, 0); eCtx.restore();
-                }
-                if (this.v.ended || this.v.currentTime > 5.4) recorder.stop(); else requestAnimationFrame(renderLoop);
-            }
-        }; renderLoop();
     }
 };
 window.onload = () => App.init();
