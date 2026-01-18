@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影透視對齊修正版</title>
+    <title>地鐵 3D - 綠板透視對位版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -49,9 +49,6 @@
 <canvas id="offscreen" style="display:none;"></canvas>
 
 <script>
-/**
- * Canvas 錄製模組 - KUO Flip-board Method
- */
 const CanvasRecorder = {
     recorder: null,
     chunks: [],
@@ -60,9 +57,7 @@ const CanvasRecorder = {
         const stream = sourceCanvas.captureStream(fps);
         const options = { mimeType: 'video/webm;codecs=vp9' };
         this.recorder = new MediaRecorder(stream, options);
-        this.recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) this.chunks.push(e.data);
-        };
+        this.recorder.ondataavailable = (e) => { if (e.data.size > 0) this.chunks.push(e.data); };
         this.recorder.start();
     },
     stop(fileName = "export_video") {
@@ -71,9 +66,7 @@ const CanvasRecorder = {
                 const blob = new Blob(this.chunks, { type: 'video/webm' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url;
-                a.download = `${fileName}.webm`;
-                a.click();
+                a.href = url; a.download = `${fileName}.webm`; a.click();
                 URL.revokeObjectURL(url);
                 resolve(blob);
             };
@@ -83,12 +76,13 @@ const CanvasRecorder = {
 };
 
 const App = {
-    // 修正：pts[3].y 改為 0.60 (再次上移)
+    // 參考綠板物理透視調優：左下 pts[3].y 上移至 0.55
     pts: [
-        {x: 0.05, y: 0.36}, {x: 0.94, y: 0.22}, 
-        {x: 0.94, y: 0.78}, {x: 0.05, y: 0.60}
+        {x: 0.05, y: 0.38}, {x: 0.94, y: 0.22}, 
+        {x: 0.94, y: 0.78}, {x: 0.05, y: 0.55}
     ],
-    timing: { start: 2.55, end: 3.83, hide: 4.75, stop: 5.50 }, 
+    // 延長文字顯示時間至 5.45
+    timing: { start: 2.55, end: 3.83, hide: 5.45, stop: 5.60 }, 
     isRecording: false,
 
     init: function() {
@@ -112,41 +106,24 @@ const App = {
 
     renderText: function() {
         this.cvs.width = 1800; this.cvs.height = 800;
-        const txt = document.getElementById('userInput').value || "白六㊗️大家新年快樂唷！";
+        const txt = document.getElementById('userInput').value || "祝大家新年快樂！";
         const bgColor = document.getElementById('bgColor').value;
         const textColor = document.getElementById('textColor').value;
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
-        
         let lines = (txt.length > 9) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
-        this.ctx.translate(1750, 400); 
-        this.ctx.textAlign = 'right';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.fillStyle = textColor;
-
+        this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
         if (bgColor !== "#000000") {
-            this.ctx.save();
-            this.ctx.fillStyle = bgColor + "E6";
-            let maxW = 0;
-            this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
-            lines.forEach(l => {
-                let w = this.ctx.measureText(l).width * 0.85;
-                if(w > maxW) maxW = w;
-            });
+            this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
+            let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+            lines.forEach(l => { let w = this.ctx.measureText(l).width * 0.85; if(w > maxW) maxW = w; });
             this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
-            this.ctx.fill();
-            this.ctx.restore();
+            this.ctx.fill(); this.ctx.restore();
         }
-
         if (lines.length === 1) {
-            this.ctx.scale(0.85, 2.0);
-            this.ctx.font = '900 350px sans-serif';
-            this.ctx.fillText(lines[0], 0, 0);
+            this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0);
         } else {
-            this.ctx.scale(0.85, 1.3); 
-            this.ctx.font = '900 240px sans-serif';
-            this.ctx.fillText(lines[0], 0, -120);
-            this.ctx.fillText(lines[1], 0, 120);
+            this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120);
         }
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
@@ -169,17 +146,14 @@ const App = {
         this.isRecording = true;
         btn.disabled = true; btn.innerText = "錄製中...";
         
-        const vW = this.v.videoWidth || 720;
-        const vH = this.v.videoHeight || 1280;
+        const vW = this.v.videoWidth;
+        const vH = this.v.videoHeight;
         const exportCvs = document.createElement('canvas');
         exportCvs.width = vW; exportCvs.height = vH;
-        const eCtx = exportCvs.getContext('2d', {alpha: false});
+        const eCtx = exportCvs.getContext('2d');
         
         CanvasRecorder.start(exportCvs, 30);
-
-        this.v.loop = false;
-        this.v.currentTime = 0;
-        await this.v.play();
+        this.v.loop = false; this.v.currentTime = 0; await this.v.play();
 
         const renderFrame = async () => {
             if (this.isRecording) {
@@ -188,12 +162,12 @@ const App = {
                 
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
-                    // 核心修正：將 pts 基於影片原始寬高重新映射
+                    // 根據影片原生寬高重新映射點位
                     const p = this.pts.map(pt => ({ x: pt.x * vW, y: pt.y * vH }));
                     const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
                     
-                    // 修正 2D Canvas 矩陣順序與 3D 渲染對齊 (a, b, c, d, e, f)
-                    // m[0]=scaleX, m[4]=skewX, m[12]=translateX, m[1]=skewY, m[5]=scaleY, m[13]=translateY
+                    // 修正 2D Canvas 變換參數，確保與 CSS matrix3d 視角同步
+                    // 參數順序: scaleX, skewY, skewX, scaleY, translateX, translateY
                     eCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
                     
                     const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
@@ -204,11 +178,8 @@ const App = {
                 if (t >= 4.8) eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
 
                 if (t >= this.timing.stop || this.v.ended) {
-                    await CanvasRecorder.stop("Metro_Export_Sync");
-                    this.isRecording = false;
-                    btn.disabled = false;
-                    btn.innerText = "穩定錄製導出";
-                    this.v.loop = true;
+                    await CanvasRecorder.stop("Metro_GreenBoard_Sync");
+                    this.isRecording = false; btn.disabled = false; btn.innerText = "穩定錄製導出"; this.v.loop = true;
                 } else {
                     requestAnimationFrame(renderFrame);
                 }
