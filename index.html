@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影與右下座標修正版</title>
+    <title>地鐵 3D - 錄影功能完全修復版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -50,10 +50,10 @@
 
 <script>
 const App = {
-    // 修正：右下角 y 從 0.85 往上拉回 0.78
+    // 修正：左下角 y 往下一點點 (0.58 -> 0.61)，右下角維持上拉後的 0.78
     pts: [
         {x: 0.18, y: 0.36}, {x: 0.94, y: 0.22}, 
-        {x: 0.94, y: 0.78}, {x: 0.18, y: 0.58}
+        {x: 0.94, y: 0.78}, {x: 0.18, y: 0.61}
     ],
     timing: { start: 2.55, end: 3.83, hide: 4.70 }, 
 
@@ -105,7 +105,7 @@ const App = {
         }
 
         if (lines.length === 1) {
-            this.ctx.scale(0.85, 2.0); // 配合座標拉回，稍微縮小垂直比例
+            this.ctx.scale(0.85, 2.0);
             this.ctx.font = '900 350px sans-serif';
             this.ctx.fillText(lines[0], 0, 0);
         } else {
@@ -133,16 +133,15 @@ const App = {
         const btn = document.getElementById('recBtn');
         btn.disabled = true; btn.innerText = "錄製中...";
         
-        const exportCvs = document.createElement('canvas');
         const vW = this.v.videoWidth || 720;
         const vH = this.v.videoHeight || 1280;
-        exportCvs.width = vW;
-        exportCvs.height = vH;
+        const exportCvs = document.createElement('canvas');
+        exportCvs.width = vW; exportCvs.height = vH;
         const eCtx = exportCvs.getContext('2d');
         
         const stream = exportCvs.captureStream(30);
         const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 12000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 15000000 });
         const chunks = [];
         
         recorder.ondataavailable = e => chunks.push(e.data);
@@ -150,7 +149,7 @@ const App = {
             const blob = new Blob(chunks, { type: mime });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Metro_Final_Export.${mime.split('/')[1]}`; a.click();
+            a.download = `Metro_Capture.${mime.split('/')[1]}`; a.click();
             btn.disabled = false; btn.innerText = "穩定錄製導出";
         };
 
@@ -161,18 +160,26 @@ const App = {
         const captureLoop = () => {
             if (recorder.state === "recording") {
                 const t = this.v.currentTime;
-                // 1. 畫背景
+                eCtx.clearRect(0, 0, vW, vH);
                 eCtx.drawImage(this.v, 0, 0, vW, vH);
                 
-                // 2. 直接繪製 3D 看板 (確保錄影中看得到文字)
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
-                    const s = vW / 1800;
-                    // 直接應用計算出的矩陣到 Canvas 繪圖上下文
-                    eCtx.setTransform(this.m[0]*s, this.m[1]*s, this.m[4]*s, this.m[5]*s, this.m[12]*s, this.m[13]*s);
-                    eCtx.drawImage(this.cvs, 0, 0);
+                    // 修正：錄影畫布必須重新計算基於影片解析度的矩陣
+                    const p = this.pts.map(pt => ({ x: pt.x * vW, y: pt.y * vH }));
+                    const mRec = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+                    
+                    // 套用轉換
+                    eCtx.setTransform(mRec[0], mRec[1], mRec[4], mRec[5], mRec[12], mRec[13]);
+                    
+                    // 處理 ClipPath 效果
+                    const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
+                    const clipX = 1800 * (1 - prog);
+                    eCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
                     eCtx.restore();
                 }
+
+                if (t >= 4.8) eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
 
                 if (this.v.ended || t > 5.5) recorder.stop();
                 else requestAnimationFrame(captureLoop);
