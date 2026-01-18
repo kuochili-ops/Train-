@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 穩定版</title>
+    <title>地鐵 3D 完美遮擋版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -49,12 +49,13 @@
 
 <script>
 const App = {
-    // 座標縮進：大幅增加左側 X 偏移，遠離軌道避免切到火車
+    // 極致縮進：大幅縮減左側 (x)，確保完全貼在牆面轉角後方 [cite: 2026-01-18]
     pts: [
-        {x: 0.15, y: 0.38}, {x: 0.95, y: 0.22}, 
-        {x: 0.95, y: 0.68}, {x: 0.15, y: 0.54}
+        {x: 0.22, y: 0.39}, {x: 0.94, y: 0.24}, 
+        {x: 0.94, y: 0.65}, {x: 0.22, y: 0.54}
     ],
-    timing: { start: 2.55, end: 3.83, hide: 5.0 }, // 提前在 5.0 秒隱藏看板
+    // 提早在 4.8 秒消失，避免與車頭重疊 [cite: 2026-01-18]
+    timing: { start: 2.55, end: 3.83, hide: 4.8 }, 
 
     init: function() {
         this.v = document.getElementById('v');
@@ -109,13 +110,11 @@ const App = {
         const btn = document.getElementById('recBtn');
         btn.disabled = true; btn.innerText = "錄製中...";
         
-        // 1. 準備匯出畫布
         const exportCvs = document.createElement('canvas');
         exportCvs.width = this.v.videoWidth || 720;
         exportCvs.height = this.v.videoHeight || 1280;
         const eCtx = exportCvs.getContext('2d');
         
-        // 2. 啟動 MediaRecorder
         const stream = exportCvs.captureStream(30);
         const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
         const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 6000000 });
@@ -128,10 +127,9 @@ const App = {
             a.href = URL.createObjectURL(blob);
             a.download = `Subway_Video.${mime.split('/')[1]}`; a.click();
             btn.disabled = false; btn.innerText = "穩定錄製導出";
-            this.v.loop = true; // 錄完恢復輪播
+            this.v.loop = true;
         };
 
-        // 3. 開始錄製 (停止輪播確保只跑一次)
         this.v.loop = false;
         this.v.currentTime = 0;
         await this.v.play();
@@ -140,9 +138,8 @@ const App = {
         const captureLoop = () => {
             if (recorder.state === "recording") {
                 const t = this.v.currentTime;
-                // 背景
                 eCtx.drawImage(this.v, 0, 0, exportCvs.width, exportCvs.height);
-                // 看板文字
+                // 錄製時也同步套用隱藏邏輯 [cite: 2026-01-18]
                 if (t >= this.timing.start && t < this.timing.hide) {
                     eCtx.save();
                     const s = exportCvs.width / 1800;
@@ -150,15 +147,10 @@ const App = {
                     eCtx.drawImage(this.cvs, 0, 0);
                     eCtx.restore();
                 }
-                // Logo
                 if (t >= 4.8) eCtx.drawImage(this.logo, exportCvs.width-130, exportCvs.height-130, 100, 100);
 
-                // 核心修正：當影片結束或超過 5.6s 時，主動停止 recorder
-                if (this.v.ended || t > 5.6) {
-                    recorder.stop();
-                } else {
-                    requestAnimationFrame(captureLoop);
-                }
+                if (this.v.ended || t > 5.6) recorder.stop();
+                else requestAnimationFrame(captureLoop);
             }
         };
         captureLoop();
