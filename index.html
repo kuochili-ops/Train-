@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 透視校正版</title>
+    <title>地鐵 3D 透視上移版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 1500px; }
+        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 2200px; }
         
         video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         #canvas-image { 
@@ -42,7 +42,7 @@
         <img id="kuo-end-img" src="IMG_6604.png">
     </div>
 
-    <div class="ui-bar" id="mainUI">
+    <div class="ui-bar">
         <div class="row">
             <div class="col"><input type="color" id="textColor" value="#ffffff" oninput="App.renderOffscreenText()">字色</div>
             <div class="col"><input type="color" id="bgColor" value="#000000" oninput="App.renderOffscreenText()">底色</div>
@@ -59,10 +59,10 @@
 
 <script>
 const App = {
-    // 重新校準透視點，增強與車廂牆面的貼合度 [cite: 2026-01-18]
+    // 透視錨點整體向上平移微調 [cite: 2026-01-18]
     pts: [
-        {x: 0.05, y: 0.40}, {x: 0.99, y: 0.23}, 
-        {x: 0.98, y: 0.79}, {x: 0.04, y: 0.60}
+        {x: 0.05, y: 0.35}, {x: 0.99, y: 0.18}, 
+        {x: 0.98, y: 0.74}, {x: 0.04, y: 0.55}
     ],
     timing: { start: 2.55, end: 3.83 }, 
     
@@ -121,7 +121,6 @@ const App = {
         let stretchY = 1.6;
 
         ctx.save();
-        // 配合透視調整，位移座標微調 [cite: 2026-01-18]
         ctx.translate(1790, 385); 
         ctx.scale(stretchX, stretchY); 
         ctx.textAlign = 'right';
@@ -132,14 +131,10 @@ const App = {
             const spacing = finalSize * 1.3;
             const y = (i - (lineCount - 1) / 2) * spacing;
             const tw = ctx.measureText(line).width;
-
-            // 繪製文字底色
             ctx.fillStyle = this.bgPicker.value + "BB"; 
             ctx.beginPath();
             ctx.roundRect(-tw - 20, (y/stretchY) - (finalSize/2), tw + 40, finalSize, 15);
             ctx.fill();
-
-            // 繪製文字
             ctx.fillStyle = this.colorPicker.value;
             ctx.fillText(line, 0, y / stretchY);
         });
@@ -162,12 +157,12 @@ const App = {
         exportCanvas.width = 720; exportCanvas.height = 1280;
         const eCtx = exportCanvas.getContext('2d');
         const stream = exportCanvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 8000000 });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 10000000 });
         const chunks = [];
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Metro_Perspective.webm`; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Metro_Up.webm`; a.click();
             btn.innerText = "穩定錄製導出"; btn.disabled = false;
         };
         this.v.currentTime = 0; await this.v.play(); recorder.start();
@@ -178,7 +173,8 @@ const App = {
                 if (cur >= this.timing.start) {
                     const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
                     eCtx.save();
-                    const scale = 720 / this.v.videoWidth;
+                    // 核心修復：使用固定解析度係數，排除 CSS 縮放干擾 [cite: 2026-01-18]
+                    const scale = 720 / 1800; 
                     eCtx.setTransform(this.m[0]*scale, this.m[1]*scale, this.m[4]*scale, this.m[5]*scale, this.m[12]*scale, this.m[13]*scale);
                     eCtx.globalAlpha = prog;
                     eCtx.drawImage(document.getElementById('temp-cvs'), 0, 0);
@@ -195,16 +191,10 @@ const App = {
         for(let i=0;i<8;i++){
             let m=i; for(let j=i+1;j<8;j++) if(Math.abs(a[j][i])>Math.abs(a[m][i])) m=j;
             [a[i],a[m]]=[a[m],a[i]]; [b[i],b[m]]=[b[m],b[i]];
-            for(let j=i+1;j<8;j++){
-                let f=a[j][i]/a[i][i]; b[j]-=f*b[i];
-                for(let k=i;k<8;k++) a[j][k]-=f*a[i][k];
-            }
+            for(let j=i+1;j<8;j++){ let f=a[j][i]/a[i][i]; b[j]-=f*b[i]; for(let k=i;k<8;k++) a[j][k]-=f*a[i][k]; }
         }
         const x=new Array(8);
-        for(let i=7;i>=0;i--){
-            let s=0; for(let j=i+1;j<8;j++) s+=a[i][j]*x[j];
-            x[i]=(b[i]-s)/a[i][i];
-        }
+        for(let i=7;i>=0;i--){ let s=0; for(let j=i+1;j<8;j++) s+=a[i][j]*x[j]; x[i]=(b[i]-s)/a[i][i]; }
         return [x[0],x[3],0,x[6],x[1],x[4],0,x[7],0,0,1,0,x[2],x[5],0,1];
     }
 };
