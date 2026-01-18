@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影修復與空間擴展版</title>
+    <title>地鐵 3D - 錄影狀態鎖修復版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -23,6 +23,7 @@
         button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
         .rec-btn { background: #E02020; color: white; }
+        .rec-btn:disabled { background: #555; opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -40,7 +41,7 @@
             <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
         </div>
         <div class="btn-row">
-            <button class="preview-btn" onclick="App.play()">預覽</button>
+            <button class="preview-btn" id="playBtn" onclick="App.play()">預覽</button>
             <button class="rec-btn" id="recBtn" onclick="App.startCapture()">穩定錄製導出</button>
         </div>
     </div>
@@ -50,12 +51,13 @@
 
 <script>
 const App = {
-    // 修正：x 往左推 (0.12)，左下 y 往下一點點 (0.63)
+    // 座標修正：x 再往左推 (0.08)，左下 y 往下一點點 (0.65)
     pts: [
-        {x: 0.12, y: 0.36}, {x: 0.94, y: 0.22}, 
-        {x: 0.94, y: 0.78}, {x: 0.12, y: 0.63}
+        {x: 0.08, y: 0.36}, {x: 0.94, y: 0.22}, 
+        {x: 0.94, y: 0.78}, {x: 0.08, y: 0.65}
     ],
-    timing: { start: 2.55, end: 3.83, hide: 4.70 }, 
+    timing: { start: 2.55, end: 3.83, hide: 4.70, stop: 5.40 }, 
+    isRecording: false,
 
     init: function() {
         this.v = document.getElementById('v');
@@ -78,13 +80,14 @@ const App = {
 
     renderText: function() {
         this.cvs.width = 1800; this.cvs.height = 800;
-        const txt = document.getElementById('userInput').value || "白六㊗️大家新年快樂唷";
+        const txt = document.getElementById('userInput').value || "白六㊗️大家新年快樂囉！";
         const bgColor = document.getElementById('bgColor').value;
         const textColor = document.getElementById('textColor').value;
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
         
-        let lines = (txt.length > 8) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
+        // 字數上限調整
+        let lines = (txt.length > 9) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
         this.ctx.translate(1750, 400); 
         this.ctx.textAlign = 'right';
         this.ctx.textBaseline = 'middle';
@@ -130,8 +133,10 @@ const App = {
     },
 
     startCapture: async function() {
+        if (this.isRecording) return;
         const btn = document.getElementById('recBtn');
-        btn.disabled = true; btn.innerText = "錄製準備中...";
+        this.isRecording = true;
+        btn.disabled = true; btn.innerText = "錄製中...";
         
         const vW = this.v.videoWidth || 720;
         const vH = this.v.videoHeight || 1280;
@@ -140,25 +145,31 @@ const App = {
         const eCtx = exportCvs.getContext('2d', {alpha: false});
         
         const stream = exportCvs.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 10000000 });
+        const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+        const recorder = new MediaRecorder(stream, { mimeType: mime, bitsPerSecond: 10000000 });
         const chunks = [];
         
-        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
         recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
+            const blob = new Blob(chunks, { type: mime });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `Metro_Export.webm`; a.click();
-            btn.disabled = false; btn.innerText = "穩定錄製導出";
+            a.download = `Metro_Export.${mime.split('/')[1]}`; a.click();
+            
+            // 強制重置按鈕狀態
+            this.isRecording = false;
+            btn.disabled = false;
+            btn.innerText = "穩定錄製導出";
+            this.v.loop = true;
         };
 
+        this.v.loop = false;
         this.v.currentTime = 0;
         await this.v.play();
-        recorder.start();
-        btn.innerText = "錄製中...";
+        recorder.start(100); // 每 100ms 蒐集一次數據
 
         const renderFrame = () => {
-            if (recorder.state === "recording") {
+            if (this.isRecording && recorder.state === "recording") {
                 const t = this.v.currentTime;
                 eCtx.drawImage(this.v, 0, 0, vW, vH);
                 
@@ -167,17 +178,19 @@ const App = {
                     const p = this.pts.map(pt => ({ x: pt.x * vW, y: pt.y * vH }));
                     const mRec = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
                     eCtx.setTransform(mRec[0], mRec[1], mRec[4], mRec[5], mRec[12], mRec[13]);
-                    
                     const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
                     const clipX = 1800 * (1 - prog);
                     eCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
                     eCtx.restore();
                 }
-
                 if (t >= 4.8) eCtx.drawImage(this.logo, vW - 150, vH - 150, 120, 120);
 
-                if (this.v.ended || t > 5.5) recorder.stop();
-                else requestAnimationFrame(renderFrame);
+                // 修正：增加明確的時間截止判斷
+                if (t >= this.timing.stop || this.v.ended) {
+                    recorder.stop();
+                } else {
+                    requestAnimationFrame(renderFrame);
+                }
             }
         };
         renderFrame();
