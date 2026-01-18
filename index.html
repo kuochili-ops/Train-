@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 純淨錄製版</title>
+    <title>地鐵 3D - 純淨預覽版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         
-        /* 錄製區域：錄製時會充滿全螢幕 */
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
         
@@ -18,33 +17,27 @@
             clip-path: inset(0 0 0 100%);
         }
 
-        /* 操作介面：錄影時會隱藏 */
         .ui-bar { 
-            background: rgba(0,0,0,0.95); padding: 20px; 
-            display: flex; flex-direction: column; gap: 15px; 
+            background: rgba(10,10,10,0.9); padding: 15px; 
+            display: flex; flex-direction: column; gap: 12px; 
             border-top: 1px solid #333; 
             padding-bottom: env(safe-area-inset-bottom);
-            transition: transform 0.4s ease, opacity 0.4s ease;
         }
-        .ui-hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
 
         .row { display: flex; gap: 10px; align-items: center; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 15px; border-radius: 12px; font-size: 16px; }
+        input[type="text"] { 
+            flex: 1; background: #222; border: 1px solid #444; color: #fff; 
+            padding: 12px; border-radius: 10px; font-size: 16px; outline: none;
+        }
+        input[type="color"] { width: 45px; height: 45px; border: none; background: none; cursor: pointer; }
         
-        /* 錄影按鈕 */
-        .rec-btn { width: 70px; height: 70px; border: 5px solid #fff; background: #ff3b30; border-radius: 50%; cursor: pointer; margin: 0 auto; }
-        
-        /* 狀態提示 */
-        #rec-status { 
-            position: fixed; top: 40px; left: 50%; transform: translateX(-50%); 
-            background: rgba(255,0,0,0.8); color: white; padding: 10px 25px; 
-            border-radius: 50px; font-weight: bold; display: none; z-index: 2000;
+        .btn-play { 
+            background: #fff; color: #000; border: none; padding: 12px 25px; 
+            border-radius: 50px; font-weight: bold; cursor: pointer; flex: 1;
         }
     </style>
 </head>
 <body>
-
-<div id="rec-status">正在純淨錄製中...播完自動存檔</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
@@ -52,13 +45,13 @@
         <img id="canvas-text">
     </div>
 
-    <div class="ui-bar" id="ui-panel">
+    <div class="ui-bar">
         <div class="row">
-            <input type="text" id="userInput" placeholder="輸入新年快樂..." oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入互動文字..." oninput="App.renderText()">
             <input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
         </div>
         <div class="row">
-            <div class="rec-btn" onclick="App.startRecording()"></div>
+            <button class="btn-play" onclick="App.v.currentTime=0; App.v.play();">開始展示預覽</button>
         </div>
     </div>
 </div>
@@ -68,20 +61,18 @@
 <script>
 const App = {
     pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
-    timing: { start: 2.55, end: 3.83, hide: 5.35, stop: 5.8 },
-    isRecording: false,
+    timing: { start: 2.55, end: 3.83, hide: 5.35 },
 
     init: function() {
         this.v = document.getElementById('v');
         this.img = document.getElementById('canvas-text');
         this.txtCvs = document.getElementById('text-canvas');
         this.ctx = this.txtCvs.getContext('2d');
-        this.ui = document.getElementById('ui-panel');
-        this.status = document.getElementById('rec-status');
         
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.renderText();
+        this.v.play();
         this.animate();
     },
 
@@ -94,7 +85,7 @@ const App = {
 
     renderText: function() {
         this.txtCvs.width = 1800; this.txtCvs.height = 800;
-        const txt = document.getElementById('userInput').value || "白六祝大家新年快樂";
+        const txt = document.getElementById('userInput').value || "互動 3D 看板預覽";
         this.ctx.clearRect(0,0,1800,800);
         this.ctx.save();
         this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle';
@@ -107,81 +98,10 @@ const App = {
     },
 
     animate: function() {
-        if(this.isRecording) return;
         const t = this.v.currentTime;
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
         requestAnimationFrame(() => this.animate());
-    },
-
-    startRecording: function() {
-        if(this.isRecording) return;
-        this.isRecording = true;
-
-        // 1. 隱藏 UI 並顯示狀態
-        this.ui.classList.add('ui-hidden');
-        this.status.style.display = 'block';
-
-        const dpr = 1.5;
-        const outCanvas = document.createElement('canvas');
-        const stage = document.getElementById('stage');
-        outCanvas.width = stage.clientWidth * dpr;
-        outCanvas.height = stage.clientHeight * dpr;
-        const outCtx = outCanvas.getContext('2d');
-
-        const stream = outCanvas.captureStream(30);
-        this.recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-        this.chunks = [];
-
-        this.recorder.ondataavailable = e => this.chunks.push(e.data);
-        this.recorder.onstop = () => {
-            const b = new Blob(this.chunks, { type: 'video/webm' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(b);
-            a.download = 'Metro_Pure.webm';
-            a.click();
-            
-            // 2. 恢復 UI
-            this.isRecording = false;
-            this.ui.classList.remove('ui-hidden');
-            this.status.style.display = 'none';
-            this.v.loop = true;
-            this.animate();
-        };
-
-        const draw = () => {
-            if(!this.isRecording) return;
-            const t = this.v.currentTime;
-
-            // 背景
-            outCtx.drawImage(this.v, 0, 0, outCanvas.width, outCanvas.height);
-
-            // 文字投影
-            if (t >= this.timing.start && t < this.timing.hide) {
-                const p = this.pts.map(pt => ({ x: pt.x * outCanvas.width, y: pt.y * outCanvas.height }));
-                const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-                outCtx.save();
-                outCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
-                const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
-                const clipX = 1800 * (1 - prog);
-                outCtx.drawImage(this.txtCvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
-                outCtx.restore();
-            }
-
-            if (t >= this.timing.stop) {
-                this.recorder.stop();
-            } else {
-                requestAnimationFrame(draw);
-            }
-        };
-
-        this.v.pause();
-        this.v.currentTime = 0;
-        this.v.loop = false;
-        this.v.play().then(() => {
-            this.recorder.start();
-            draw();
-        });
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
