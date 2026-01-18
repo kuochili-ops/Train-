@@ -3,70 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 專業純淨版</title>
+    <title>地鐵 3D - 收訊方唯讀版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
-        
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        
-        /* 影片與投影區 */
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; cursor: pointer; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
         
-        /* 投影圖層 (CSS 3D 變形) */
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2; pointer-events: none;
             clip-path: inset(0 0 0 100%);
-            will-change: transform, clip-path;
         }
-        
-        /* Logo */
         #kuo-logo { 
             position: absolute; bottom: 30px; right: 30px; width: 120px; z-index: 99; 
             opacity: 0; transition: opacity 1s ease-in-out; pointer-events: none;
         }
-        
-        /* 操作介面 */
         .ui-bar { 
-            background: rgba(17, 17, 17, 0.95); padding: 15px; 
-            display: flex; flex-direction: column; gap: 12px; 
-            border-top: 1px solid #333; 
+            background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; 
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            padding-bottom: calc(var(--safe-bottom) + 10px);
+            padding-bottom: calc(var(--safe-bottom) + 5px);
             position: absolute; bottom: 0; width: 100%; z-index: 100;
             box-sizing: border-box;
-            backdrop-filter: blur(10px);
         }
+        /* 徹底隱藏且不可點擊 */
+        .ui-readonly { display: none !important; pointer-events: none !important; }
         
-        /* 徹底隱藏：針對收訊方或手動隱藏 */
-        .ui-readonly { transform: translateY(100%) !important; visibility: hidden !important; pointer-events: none !important; }
-        
-        .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 14px; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
-        input[type="color"] { width: 44px; height: 44px; border: none; background: none; cursor: pointer; border-radius: 4px; }
-        
+        .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 13px; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
+        input[type="color"] { width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
         .btn-row { display: flex; gap: 8px; }
-        button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; transition: opacity 0.2s; }
-        button:active { opacity: 0.7; }
+        button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .share-btn { background: #34c759; color: white; }
-        .hide-btn { background: #fff; color: black; }
-        
-        /* 提示字眼 */
-        #hint { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.3); font-size: 12px; z-index: 1; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div class="app-container">
     <div class="viewport" id="stage" onclick="App.handleScreenClick()">
-        <div id="hint">點擊畫面重播</div>
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <img id="canvas-image">
         <img id="kuo-logo" src="IMG_6604.png">
     </div>
-    
     <div class="ui-bar" id="ui">
         <div class="row">
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
@@ -74,8 +53,7 @@
             <input type="text" id="userInput" placeholder="輸入文字..." value="新年快樂" oninput="App.renderText()">
         </div>
         <div class="btn-row">
-            <button class="share-btn" onclick="App.copyShareLink()">複製分享連結 (唯讀)</button>
-            <button class="hide-btn" onclick="App.toggleUI(true)">隱藏介面</button>
+            <button class="share-btn" onclick="App.copyShareLink()">複製分享連結</button>
         </div>
     </div>
 </div>
@@ -84,8 +62,7 @@
 
 <script>
 const App = {
-    // 綠板在影片中的精準 3D 頂點 (百分比)
-    rawPts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
+    pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
     timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35 },
     isReadonly: false,
 
@@ -97,17 +74,15 @@ const App = {
         this.ctx = this.cvs.getContext('2d');
         this.ui = document.getElementById('ui');
 
-        // 讀取網址參數
         const params = new URLSearchParams(window.location.search);
         if(params.has('t')) document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
         if(params.has('tc')) document.getElementById('textColor').value = '#' + params.get('tc');
         if(params.has('bc')) document.getElementById('bgColor').value = '#' + params.get('bc');
         
-        // 如果是收訊模式 (m=s)，徹底關閉介面交互
+        // 判斷是否為收訊方模式
         if(params.get('m') === 's') {
             this.isReadonly = true;
-            this.ui.classList.add('ui-readonly');
-            document.getElementById('hint').innerText = "觀賞模式";
+            this.ui.classList.add('ui-readonly'); // 徹底鎖定 UI
         }
 
         window.addEventListener('resize', () => this.updateWarp());
@@ -116,29 +91,18 @@ const App = {
         this.renderText();
         this.v.play();
         this.animate();
-        
-        // 確保加載時針對不同螢幕比例進行第一次校準
-        setTimeout(() => this.updateWarp(), 500);
+        setTimeout(() => this.updateWarp(), 300);
     },
 
-    // 關鍵：將 3D 投影貼合至「綠板表面」，並補償螢幕縱橫比裁切
     updateWarp: function() {
         const vw = this.v.videoWidth || 1920, vh = this.v.videoHeight || 1080;
         const rect = document.getElementById('stage').getBoundingClientRect();
-        
         const vRatio = vw / vh, sRatio = rect.width / rect.height;
         let scale, ox = 0, oy = 0;
+        if (sRatio > vRatio) { scale = rect.width / vw; oy = (rect.height - vh * scale) / 2; }
+        else { scale = rect.height / vh; ox = (rect.width - vw * scale) / 2; }
 
-        // 計算 object-fit: cover 下的偏移量
-        if (sRatio > vRatio) {
-            scale = rect.width / vw;
-            oy = (rect.height - vh * scale) / 2;
-        } else {
-            scale = rect.height / vh;
-            ox = (rect.width - vw * scale) / 2;
-        }
-
-        const p = this.rawPts.map(pt => ({
+        const p = this.pts.map(pt => ({
             x: pt.x * vw * scale + ox,
             y: pt.y * vh * scale + oy
         }));
@@ -147,70 +111,46 @@ const App = {
         this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
 
-    // 依照您要求的文字顯示版本 (單/雙行、比例縮放、底框)
     renderText: function() {
         this.cvs.width = 1800; this.cvs.height = 800;
-        const rawTxt = document.getElementById('userInput').value || "白六祝大家新年快樂";
+        const rawTxt = document.getElementById('userInput').value || "新年快樂";
         const bgColor = document.getElementById('bgColor').value;
         const textColor = document.getElementById('textColor').value;
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
-        
         let lines = (rawTxt.length <= 6) ? [rawTxt] : [rawTxt.substring(0, Math.ceil(rawTxt.length/2)), rawTxt.substring(Math.ceil(rawTxt.length/2))];
         this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
-        
         if (bgColor !== "#000000") {
-            this.ctx.save(); this.ctx.fillStyle = bgColor + "E6"; // 90% 透明度
+            this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
             let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
             lines.forEach(l => { let w = this.ctx.measureText(l).width * 0.85; if(w > maxW) maxW = w; });
             this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
             this.ctx.fill(); this.ctx.restore();
         }
-        
-        if (lines.length === 1) { 
-            this.ctx.scale(0.85, 2.0); 
-            this.ctx.font = '900 350px sans-serif'; 
-            this.ctx.fillText(lines[0], 0, 0); 
-        } else { 
-            this.ctx.scale(0.85, 1.3); 
-            this.ctx.font = '900 240px sans-serif'; 
-            this.ctx.fillText(lines[0], 0, -120); 
-            this.ctx.fillText(lines[1], 0, 120); 
-        }
+        if (lines.length === 1) { this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0); }
+        else { this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120); }
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
     },
 
-    // 處理點擊行為
     handleScreenClick: function() {
         if(this.isReadonly) {
-            // 收訊方：僅重播影片，絕不彈出 UI
+            // 收訊方模式：點擊螢幕僅重播，不顯示 UI
             this.v.currentTime = 0;
             this.v.play();
         } else {
-            // 發送方：切換介面顯示/隱藏
-            this.toggleUI();
+            // 發送方模式：點擊螢幕切換 UI 顯示
+            this.ui.classList.toggle('ui-readonly');
+            setTimeout(() => this.updateWarp(), 150);
         }
-    },
-
-    toggleUI: function(forceHide = false) {
-        if(this.isReadonly) return; // 再次確保收訊方無法操作
-        if(forceHide) this.ui.classList.add('ui-readonly');
-        else this.ui.classList.toggle('ui-readonly');
-        // UI 動畫結束後重新計算透視
-        setTimeout(() => this.updateWarp(), 450);
     },
 
     animate: function() {
         const t = this.v.currentTime;
-        // 5.35秒後自動隱藏看板文字，模擬進入隧道深處
         this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
         this.logo.style.opacity = (t >= this.timing.logoStart && t < 5.8) ? '1' : '0';
-        
-        // 綠板掃過動畫
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
-        
         requestAnimationFrame(() => this.animate());
     },
 
@@ -218,15 +158,12 @@ const App = {
         const t = encodeURIComponent(document.getElementById('userInput').value);
         const tc = document.getElementById('textColor').value.replace('#','');
         const bc = document.getElementById('bgColor').value.replace('#','');
-        // m=s 是收訊方無法操作的開關
         const url = `${window.location.origin}${window.location.pathname}?t=${t}&tc=${tc}&bc=${bc}&m=s`;
-        
         navigator.clipboard.writeText(url).then(() => {
-            alert('唯讀分享連結已複製！對方開啟時將完全無法看到介面，最適合觀賞。');
+            alert('唯讀分享連結已複製！對方將無法看到或使用操作介面。');
         });
     },
 
-    // 高精度單應性矩陣計算
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
         const a = [[x1,y1,1,0,0,0,-px1*x1,-px1*y1],[0,0,0,x1,y1,1,-py1*x1,-py1*y1],[x2,y2,1,0,0,0,-px2*x2,-px2*y2],[0,0,0,x2,y2,1,-py2*x2,-py2*y2],[x3,y3,1,0,0,0,-px3*x3,-px3*y3],[0,0,0,x3,y3,1,-py3*x3,-py3*y3],[x4,y4,1,0,0,0,-px4*x4,-px4*y4],[0,0,0,x4,y4,1,-py4*x4,-py4*y4]];
         const b = [px1,py1,px2,py2,px3,py3,px4,py4];
@@ -240,7 +177,6 @@ const App = {
         return [x[0],x[3],0,x[6],x[1],x[4],0,x[7],0,0,1,0,x[2],x[5],0,1];
     }
 };
-
 window.onload = () => App.init();
 </script>
 </body>
