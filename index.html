@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 定位點微調版</title>
+    <title>地鐵 3D - 自動分行優化版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -36,7 +36,7 @@
         <div class="row">
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
             底：<input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
-            <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="請輸入文字..." oninput="App.renderText()">
         </div>
         <div class="btn-row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
@@ -48,14 +48,14 @@
 
 <script>
 const App = {
-    // 座標微調：左下角 (pts[3]) Y 軸增加至 0.58
+    // 保留您校準完美的點位
     pts: [
         {x: 0.08, y: 0.35}, // 左上
         {x: 0.94, y: 0.22}, // 右上
         {x: 0.94, y: 0.78}, // 右下
-        {x: 0.08, y: 0.58}  // 左下 (已再往下一點)
+        {x: 0.08, y: 0.58}  // 左下
     ],
-    timing: { start: 2.55, end: 3.83, hide: 5.35, stop: 5.50 }, 
+    timing: { start: 2.55, end: 3.83, hide: 5.35 }, 
 
     init: function() {
         this.v = document.getElementById('v');
@@ -78,27 +78,54 @@ const App = {
 
     renderText: function() {
         this.cvs.width = 1800; this.cvs.height = 800;
-        const txt = document.getElementById('userInput').value || "白六㊗️大家新年快樂唷！";
+        const rawTxt = document.getElementById('userInput').value || "白六祝大家新年快樂";
         const bgColor = document.getElementById('bgColor').value;
         const textColor = document.getElementById('textColor').value;
+        
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
         
-        let lines = (txt.length > 9) ? [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))] : [txt];
-        this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
-
-        if (bgColor !== "#000000") {
-            this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
-            let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
-            lines.forEach(l => { let w = this.ctx.measureText(l).width * 0.85; if(w > maxW) maxW = w; });
-            this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
-            this.ctx.fill(); this.ctx.restore();
-        }
-        if (lines.length === 1) {
-            this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0);
+        // 分行邏輯：超過 6 個字就切兩行
+        let lines = [];
+        if (rawTxt.length <= 6) {
+            lines = [rawTxt];
         } else {
-            this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120);
+            const mid = Math.ceil(rawTxt.length / 2);
+            lines = [rawTxt.substring(0, mid), rawTxt.substring(mid)];
         }
+
+        this.ctx.translate(1750, 400); 
+        this.ctx.textAlign = 'right'; 
+        this.ctx.textBaseline = 'middle'; 
+        this.ctx.fillStyle = textColor;
+
+        // 繪製背景塊
+        if (bgColor !== "#000000") {
+            this.ctx.save();
+            this.ctx.fillStyle = bgColor + "E6";
+            let maxW = 0;
+            this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+            lines.forEach(l => {
+                let w = this.ctx.measureText(l).width * 0.85;
+                if(w > maxW) maxW = w;
+            });
+            this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
+            this.ctx.fill();
+            this.ctx.restore();
+        }
+
+        // 繪製文字
+        if (lines.length === 1) {
+            this.ctx.scale(0.85, 2.0); // 單行拉高視覺感
+            this.ctx.font = '900 350px sans-serif';
+            this.ctx.fillText(lines[0], 0, 0);
+        } else {
+            this.ctx.scale(0.85, 1.3); // 兩行縮小比例
+            this.ctx.font = '900 240px sans-serif';
+            this.ctx.fillText(lines[0], 0, -120);
+            this.ctx.fillText(lines[1], 0, 120);
+        }
+        
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
     },
