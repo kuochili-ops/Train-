@@ -3,14 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 直錄預覽版</title>
+    <title>地鐵 3D - 穩定合成導出版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        
-        /* 這是我們要錄製的範圍 */
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; }
-        
         video#v { width: 100%; height: 100%; object-fit: cover; }
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
@@ -21,9 +18,7 @@
             position: absolute; bottom: 30px; right: 30px; width: 120px; z-index: 99; 
             opacity: 0; transition: opacity 1s ease-in-out; pointer-events: none;
         }
-        
-        /* 控制介面 */
-        .ui-bar { background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; transition: 0.3s; }
+        .ui-bar { background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; }
         .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 13px; }
         input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; }
         input[type="color"] { width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
@@ -31,14 +26,11 @@
         button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
         .rec-btn { background: #E02020; color: white; }
-        
-        /* 錄製中隱藏 UI */
-        .recording .ui-bar { opacity: 0; pointer-events: none; transform: translateY(100%); }
     </style>
 </head>
-<body class="">
+<body>
 
-<div class="app-container" id="mainApp">
+<div class="app-container">
     <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <img id="canvas-image">
@@ -52,7 +44,7 @@
         </div>
         <div class="btn-row">
             <button class="preview-btn" onclick="App.play()">播放預覽</button>
-            <button class="rec-btn" id="recBtn" onclick="App.startDirectCapture()">直錄預覽畫面</button>
+            <button class="rec-btn" id="recBtn" onclick="App.startStableCapture()">穩定錄製導出</button>
         </div>
     </div>
 </div>
@@ -60,13 +52,16 @@
 <canvas id="offscreen" style="display:none;"></canvas>
 
 <script>
-// 這裡我們稍微修改模組，讓它能接受 Stream
+/** Canvas 錄製模組 - KUO Flip-board Method **/
 const CanvasRecorder = {
     recorder: null,
     chunks: [],
-    start(stream) {
+    start(sourceCanvas, fps = 30) {
         this.chunks = [];
-        this.recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+        const stream = sourceCanvas.captureStream(fps);
+        // 手機端相容性較好的 mimeType
+        const options = { mimeType: 'video/webm;codecs=vp8' }; 
+        this.recorder = new MediaRecorder(stream, options);
         this.recorder.ondataavailable = (e) => this.chunks.push(e.data);
         this.recorder.start();
     },
@@ -87,7 +82,8 @@ const CanvasRecorder = {
 
 const App = {
     pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
-    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35 },
+    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35, stop: 5.8 },
+    isRecording: false,
 
     init: function() {
         this.v = document.getElementById('v');
@@ -133,51 +129,75 @@ const App = {
     play: function() { this.v.currentTime = 0; this.v.play(); },
 
     animate: function() {
+        if (this.isRecording) return;
         const t = this.v.currentTime;
-        const isOut = t >= this.timing.hide;
-        this.img.style.display = isOut ? 'none' : 'block';
+        this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
         this.logo.style.opacity = (t >= this.timing.logoStart && t < 5.8) ? '1' : '0';
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
-        this.img.style.clipPath = isOut ? 'inset(0 0 0 100%)' : ((t < this.timing.start) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`);
+        this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
         requestAnimationFrame(() => this.animate());
     },
 
-    // 直錄功能：使用 getDisplayMedia 或 captureStream (取決於瀏覽器支持)
-    startDirectCapture: async function() {
+    startStableCapture: async function() {
+        if (this.isRecording) return;
         const btn = document.getElementById('recBtn');
-        const app = document.getElementById('mainApp');
-        
-        try {
-            // 1. 隱藏 UI，讓畫面乾淨
-            document.body.classList.add('recording');
+        const stage = document.getElementById('stage');
+        this.isRecording = true; 
+        btn.innerText = "錄製導出中..."; btn.disabled = true;
+
+        // 核心修正：將錄影畫布寬高設為跟當前預覽視窗一模一樣
+        const w = stage.clientWidth;
+        const h = stage.clientHeight;
+        const exportCvs = document.createElement('canvas');
+        exportCvs.width = w; exportCvs.height = h;
+        const eCtx = exportCvs.getContext('2d');
+
+        CanvasRecorder.start(exportCvs, 30);
+        this.v.pause(); this.v.currentTime = 0; 
+        await this.v.play();
+
+        const renderFrame = async () => {
+            const t = this.v.currentTime;
+            eCtx.clearRect(0, 0, w, h);
             
-            // 2. 請求螢幕錄製串流 (這會彈出視窗請您選擇「分頁」)
-            // 註：在行動裝置或特定瀏覽器上，建議使用 captureStream
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { cursor: "never" },
-                audio: false
-            });
+            // 1. 畫影片背景 (模擬 object-fit: cover)
+            const vRatio = this.v.videoWidth / this.v.videoHeight;
+            const sRatio = w / h;
+            let drawW, drawH, drawX, drawY;
+            if (sRatio > vRatio) { drawW = w; drawH = w / vRatio; drawX = 0; drawY = (h - drawH) / 2; }
+            else { drawH = h; drawW = h * vRatio; drawX = (w - drawW) / 2; drawY = 0; }
+            eCtx.drawImage(this.v, drawX, drawY, drawW, drawH);
 
-            CanvasRecorder.start(stream);
-            
-            // 3. 開始播放影片
-            this.v.currentTime = 0;
-            this.v.loop = false;
-            await this.v.play();
+            // 2. 畫文字看板 (座標完全同步預覽)
+            if (t >= this.timing.start && t < this.timing.hide) {
+                const p = this.pts.map(pt => ({ x: pt.x * w, y: pt.y * h }));
+                const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+                eCtx.save();
+                eCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
+                const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
+                const clipX = 1800 * (1 - prog);
+                eCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
+                eCtx.restore();
+            }
 
-            // 4. 當影片播放結束或達到特定時間停止錄製
-            this.v.onended = async () => {
-                await CanvasRecorder.stop("Metro_Direct_View");
-                stream.getTracks().forEach(track => track.stop()); // 關閉錄製指標
-                document.body.classList.remove('recording');
-                this.v.loop = true;
-                alert("錄製完成！");
-            };
+            // 3. 畫 Logo (座標完全同步預覽)
+            if (t >= this.timing.logoStart && t < 5.8) {
+                eCtx.save();
+                eCtx.globalAlpha = 1;
+                // 根據預覽時 CSS 的位置 (bottom:30, right:30, width:120) 繪製
+                eCtx.drawImage(this.logo, w - 120 - 30, h - 120 - 30, 120, 120);
+                eCtx.restore();
+            }
 
-        } catch (err) {
-            console.error("無法開啟錄製:", err);
-            document.body.classList.remove('recording');
-        }
+            if (t >= this.timing.stop || this.v.ended) {
+                await CanvasRecorder.stop("Metro_3D_Stabilized");
+                this.isRecording = false; btn.innerText = "穩定錄製導出"; btn.disabled = false;
+                this.v.loop = true; this.animate();
+            } else {
+                requestAnimationFrame(renderFrame);
+            }
+        };
+        renderFrame();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
