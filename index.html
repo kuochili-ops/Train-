@@ -3,46 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 穩定分享展示版</title>
+    <title>地鐵 3D - 穩定分享版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, "Microsoft JhengHei", sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        
-        /* 影片視窗 */
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; cursor: pointer; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
-        
-        /* 3D 投影文字 */
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2; pointer-events: none;
             clip-path: inset(0 0 0 100%);
         }
-        
-        /* Logo 圖層 */
         #kuo-logo { 
             position: absolute; bottom: 30px; right: 30px; width: 120px; z-index: 99; 
             opacity: 0; transition: opacity 1s ease-in-out; pointer-events: none;
         }
-
-        /* 互動介面 */
         .ui-bar { 
-            background: #111; padding: 15px 20px; 
-            display: flex; flex-direction: column; gap: 12px; 
-            border-top: 1px solid #333; 
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; 
+            transition: transform 0.4s ease;
             padding-bottom: calc(var(--safe-bottom) + 5px);
-            z-index: 100;
         }
         .ui-hide { transform: translateY(100%); display: none; }
-
         .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 13px; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 15px; }
-        input[type="color"] { width: 35px; height: 35px; border: none; background: none; cursor: pointer; }
-        
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; }
+        input[type="color"] { width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
         .btn-row { display: flex; gap: 8px; }
-        button { flex: 1; padding: 14px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+        button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .share-btn { background: #34c759; color: white; }
         .preview-btn { background: #fff; color: black; }
     </style>
@@ -55,12 +42,11 @@
         <img id="canvas-image">
         <img id="kuo-logo" src="IMG_6604.png">
     </div>
-
     <div class="ui-bar" id="ui">
         <div class="row">
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
             底：<input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
-            <input type="text" id="userInput" placeholder="輸入文字..." value="白六祝大家新年快樂" oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入文字..." value="新年快樂" oninput="App.renderText()">
         </div>
         <div class="btn-row">
             <button class="share-btn" onclick="App.copyShareLink()">分享連結</button>
@@ -73,7 +59,6 @@
 
 <script>
 const App = {
-    // 繼承您滿意的座標設定
     pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
     timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35, stop: 5.8 },
 
@@ -83,8 +68,8 @@ const App = {
         this.cvs = document.getElementById('offscreen');
         this.logo = document.getElementById('kuo-logo');
         this.ctx = this.cvs.getContext('2d');
-        
-        // 處理 URL 參數
+
+        // 讀取 URL 參數
         const params = new URLSearchParams(window.location.search);
         if(params.has('t')) document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
         if(params.has('tc')) document.getElementById('textColor').value = '#' + params.get('tc');
@@ -92,8 +77,6 @@ const App = {
         if(params.get('m') === 's') this.toggleUI(true);
 
         window.addEventListener('resize', () => this.updateWarp());
-        this.v.onloadedmetadata = () => this.updateWarp();
-        
         this.updateWarp();
         this.renderText();
         this.v.play();
@@ -101,51 +84,33 @@ const App = {
     },
 
     updateWarp: function() {
-        const vw = this.v.videoWidth || 1920, vh = this.v.videoHeight || 1080;
-        const rect = this.v.getBoundingClientRect();
-        
-        // 解決 object-fit: cover 跑位問題
-        const vRatio = vw / vh, sRatio = rect.width / rect.height;
-        let scale, ox = 0, oy = 0;
-        if (sRatio > vRatio) { scale = rect.width / vw; oy = (rect.height - vh * scale) / 2; }
-        else { scale = rect.height / vh; ox = (rect.width - vw * scale) / 2; }
-
-        const p = this.pts.map(pt => ({
-            x: pt.x * vw * scale + ox,
-            y: pt.y * vh * scale + oy
-        }));
-
-        this.m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        this.img.style.transform = `matrix3d(${this.m.join(',')})`;
+        const r = document.getElementById('stage').getBoundingClientRect();
+        const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
+        const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
 
     renderText: function() {
         this.cvs.width = 1800; this.cvs.height = 800;
-        const rawTxt = document.getElementById('userInput').value || "";
+        const rawTxt = document.getElementById('userInput').value || "白六祝大家新年快樂";
         const bgColor = document.getElementById('bgColor').value;
         const textColor = document.getElementById('textColor').value;
         this.ctx.clearRect(0, 0, 1800, 800);
-        
         this.ctx.save();
-        // 底色 (帶透明感)
-        this.ctx.fillStyle = bgColor === "#000000" ? "transparent" : bgColor + "E6";
-        if (bgColor !== "#000000") {
-            this.ctx.fillRect(0,0,1800,800);
-        }
-
         let lines = (rawTxt.length <= 6) ? [rawTxt] : [rawTxt.substring(0, Math.ceil(rawTxt.length/2)), rawTxt.substring(Math.ceil(rawTxt.length/2))];
         this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
         
-        if (lines.length === 1) { 
-            this.ctx.scale(0.85, 2.0); 
-            this.ctx.font = '900 350px sans-serif'; 
-            this.ctx.fillText(lines[0], 0, 0); 
-        } else { 
-            this.ctx.scale(0.85, 1.3); 
-            this.ctx.font = '900 240px sans-serif'; 
-            this.ctx.fillText(lines[0], 0, -120); 
-            this.ctx.fillText(lines[1], 0, 120); 
+        // 依照您要求的版本，底色 logic 完全不修改
+        if (bgColor !== "#000000") {
+            this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
+            let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+            lines.forEach(l => { let w = this.ctx.measureText(l).width * 0.85; if(w > maxW) maxW = w; });
+            this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
+            this.ctx.fill(); this.ctx.restore();
         }
+        
+        if (lines.length === 1) { this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0); }
+        else { this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120); }
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
     },
@@ -154,11 +119,7 @@ const App = {
         const t = this.v.currentTime;
         this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
         this.logo.style.opacity = (t >= this.timing.logoStart && t < 5.8) ? '1' : '0';
-        
-        // 繼承您滿意的揭露公式
-        let prog = (t - this.timing.start) / (this.timing.end - this.timing.start);
-        prog = Math.pow(Math.max(0, Math.min(1, prog)), 0.85); 
-        
+        const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
         requestAnimationFrame(() => this.animate());
     },
@@ -167,7 +128,6 @@ const App = {
         const ui = document.getElementById('ui');
         if(forceHide) ui.classList.add('ui-hide');
         else ui.classList.toggle('ui-hide');
-        if(!ui.classList.contains('ui-hide')) this.updateWarp();
     },
 
     copyShareLink: function() {
@@ -175,8 +135,10 @@ const App = {
         const tc = document.getElementById('textColor').value.replace('#','');
         const bc = document.getElementById('bgColor').value.replace('#','');
         const url = `${window.location.origin}${window.location.pathname}?t=${t}&tc=${tc}&bc=${bc}&m=s`;
-        
-        navigator.clipboard.writeText(url).then(() => alert('分享連結已複製！進入該連結將自動隱藏介面。'));
+        navigator.clipboard.writeText(url).then(() => {
+            alert('分享連結已複製！進入該連結將自動隱藏介面。');
+            this.toggleUI(true);
+        });
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
