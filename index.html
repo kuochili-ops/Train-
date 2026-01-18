@@ -3,26 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D 透視上移版</title>
+    <title>地鐵 3D 最終修正錄製版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; color: white; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 2200px; }
-        
         video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
-            transform-origin: 0 0; z-index: 2;
-            clip-path: inset(0 0 0 100%); 
-            mix-blend-mode: normal; 
-            pointer-events: none;
+            transform-origin: 0 0; z-index: 2; clip-path: inset(0 0 0 100%); mix-blend-mode: normal; pointer-events: none;
         }
-
-        #kuo-end-img {
-            position: absolute; bottom: 25px; right: 25px; width: 120px;
-            z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen;
-        }
-
+        #kuo-end-img { position: absolute; bottom: 25px; right: 25px; width: 120px; z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen; }
         .ui-bar { background: rgba(10, 10, 10, 0.95); padding: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; border-top: 1px solid #333; }
         .row { display: flex; gap: 8px; align-items: center; }
         .col { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #888; }
@@ -41,7 +32,6 @@
         <img id="canvas-image">
         <img id="kuo-end-img" src="IMG_6604.png">
     </div>
-
     <div class="ui-bar">
         <div class="row">
             <div class="col"><input type="color" id="textColor" value="#ffffff" oninput="App.renderOffscreenText()">字色</div>
@@ -50,7 +40,7 @@
         </div>
         <div class="row">
             <button class="preview-btn" onclick="App.play()">預覽</button>
-            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">穩定錄製導出</button>
+            <button class="rec-btn" id="recBtn" onclick="App.startCapture()">開始導出錄製</button>
         </div>
     </div>
 </div>
@@ -59,11 +49,7 @@
 
 <script>
 const App = {
-    // 透視錨點整體向上平移微調 [cite: 2026-01-18]
-    pts: [
-        {x: 0.05, y: 0.35}, {x: 0.99, y: 0.18}, 
-        {x: 0.98, y: 0.74}, {x: 0.04, y: 0.55}
-    ],
+    pts: [{x: 0.05, y: 0.35}, {x: 0.99, y: 0.18}, {x: 0.98, y: 0.74}, {x: 0.04, y: 0.55}],
     timing: { start: 2.55, end: 3.83 }, 
     
     init: function() {
@@ -73,7 +59,6 @@ const App = {
         this.input = document.getElementById('userInput');
         this.colorPicker = document.getElementById('textColor');
         this.bgPicker = document.getElementById('bgColor');
-        
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.animate();
@@ -88,11 +73,7 @@ const App = {
         this.img.style.transform = `matrix3d(${this.m.join(',')})`;
     },
 
-    play: function() {
-        this.renderOffscreenText();
-        this.v.currentTime = 0;
-        this.v.play();
-    },
+    play: function() { this.v.currentTime = 0; this.v.play(); },
 
     renderOffscreenText: function() {
         const cvs = document.getElementById('temp-cvs');
@@ -106,25 +87,17 @@ const App = {
         let currentLen = 0;
         for (let char of rawText) {
             let cLen = char.charCodeAt(0) < 128 ? 0.5 : 1;
-            if (currentLen + cLen > 6.2) {
-                lines.push(currentLine); currentLine = char; currentLen = cLen;
-            } else {
-                currentLine += char; currentLen += cLen;
-            }
+            if (currentLen + cLen > 6.2) { lines.push(currentLine); currentLine = char; currentLen = cLen; }
+            else { currentLine += char; currentLen += cLen; }
         }
         if (currentLine) lines.push(currentLine);
 
         let lineCount = lines.length;
-        let baseSize = 420; 
-        let finalSize = baseSize / (lineCount > 1 ? (lineCount * 0.85) : 1);
-        let stretchX = lineCount > 1 ? 0.52 : 0.62; 
-        let stretchY = 1.6;
-
+        let finalSize = 420 / (lineCount > 1 ? (lineCount * 0.85) : 1);
         ctx.save();
         ctx.translate(1790, 385); 
-        ctx.scale(stretchX, stretchY); 
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
+        ctx.scale(lineCount > 1 ? 0.52 : 0.62, 1.6); 
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
         ctx.font = `900 ${finalSize}px "Impact", sans-serif`;
 
         lines.forEach((line, i) => {
@@ -133,10 +106,10 @@ const App = {
             const tw = ctx.measureText(line).width;
             ctx.fillStyle = this.bgPicker.value + "BB"; 
             ctx.beginPath();
-            ctx.roundRect(-tw - 20, (y/stretchY) - (finalSize/2), tw + 40, finalSize, 15);
+            ctx.roundRect(-tw - 20, (y/1.6) - (finalSize/2), tw + 40, finalSize, 15);
             ctx.fill();
             ctx.fillStyle = this.colorPicker.value;
-            ctx.fillText(line, 0, y / stretchY);
+            ctx.fillText(line, 0, y / 1.6);
         });
         ctx.restore();
         this.img.src = cvs.toDataURL();
@@ -151,29 +124,39 @@ const App = {
     },
 
     startCapture: async function() {
-        const btn = document.getElementById('recBtn'); btn.innerText = "錄製中..."; btn.disabled = true;
-        this.renderOffscreenText();
+        const btn = document.getElementById('recBtn'); btn.innerText = "錄製準備中..."; btn.disabled = true;
         const exportCanvas = document.createElement('canvas'); 
         exportCanvas.width = 720; exportCanvas.height = 1280;
         const eCtx = exportCanvas.getContext('2d');
+        
+        let mimeType = 'video/webm;codecs=vp9';
+        if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+        
         const stream = exportCanvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', bitsPerSecond: 10000000 });
+        const recorder = new MediaRecorder(stream, { mimeType, bitsPerSecond: 10000000 });
         const chunks = [];
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Metro_Up.webm`; a.click();
-            btn.innerText = "穩定錄製導出"; btn.disabled = false;
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Final_Metro_3D.webm`; a.click();
+            btn.innerText = "開始導出錄製"; btn.disabled = false;
         };
-        this.v.currentTime = 0; await this.v.play(); recorder.start();
+
+        this.v.currentTime = 0;
+        await this.v.play();
+        recorder.start();
+        btn.innerText = "正在進行離屏合成...";
+
         const renderLoop = () => {
             if (recorder.state === "recording") {
+                // 1. 繪製底層影片
                 eCtx.drawImage(this.v, 0, 0, 720, 1280);
                 const cur = this.v.currentTime;
+                // 2. 繪製 3D 文字層
                 if (cur >= this.timing.start) {
                     const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
                     eCtx.save();
-                    // 核心修復：使用固定解析度係數，排除 CSS 縮放干擾 [cite: 2026-01-18]
+                    // 固定錄製解析度 720x1280 下的矩陣縮放 [cite: 2026-01-18]
                     const scale = 720 / 1800; 
                     eCtx.setTransform(this.m[0]*scale, this.m[1]*scale, this.m[4]*scale, this.m[5]*scale, this.m[12]*scale, this.m[13]*scale);
                     eCtx.globalAlpha = prog;
@@ -182,7 +165,8 @@ const App = {
                 }
                 if (this.v.ended || cur > 5.4) recorder.stop(); else requestAnimationFrame(renderLoop);
             }
-        }; renderLoop();
+        };
+        renderLoop();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
