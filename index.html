@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 即看即錄版</title>
+    <title>地鐵 3D - 錄影同步修正</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; touch-action: none; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -16,12 +16,12 @@
         }
         #kuo-logo { 
             position: absolute; bottom: 30px; right: 30px; width: 120px; z-index: 99; 
-            opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none;
+            opacity: 0; transition: opacity 0.5s; pointer-events: none;
         }
-        .ui-bar { background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); }
+        .ui-bar { background: rgba(0,0,0,0.9); padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); }
         .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 13px; }
         input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
-        .rec-circle { width: 50px; height: 50px; border: 3px solid #fff; background: #ff0000; border-radius: 50%; cursor: pointer; flex-shrink: 0; }
+        .rec-btn { width: 50px; height: 50px; border: 3px solid #fff; background: #ff0000; border-radius: 50%; cursor: pointer; }
         #stop-rec-btn { position: fixed; top: 50px; left: 50%; transform: translateX(-50%); z-index: 500; background: #ff0000; color: white; padding: 12px 25px; border-radius: 50px; font-weight: bold; display: none; }
     </style>
 </head>
@@ -37,13 +37,13 @@
     </div>
     <div class="ui-bar">
         <div class="row">
-            <input type="text" id="userInput" placeholder="輸入新年祝賀..." oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
             <input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
             <input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
         </div>
         <div class="row" style="justify-content: space-around;">
-            <button style="padding: 10px 20px; border-radius: 8px; background: #444; color: white; border: none;" onclick="App.play()">預覽</button>
-            <div class="rec-circle" onclick="App.startRecording()"></div>
+            <button onclick="App.play()" style="background:#444; color:#fff; border:none; padding:10px 20px; border-radius:8px;">預覽</button>
+            <div class="rec-btn" onclick="App.startRecording()"></div>
         </div>
     </div>
 </div>
@@ -71,8 +71,9 @@ const App = {
     updateWarp: function() {
         const r = document.getElementById('stage').getBoundingClientRect();
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
-        this.m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        this.img.style.transform = `matrix3d(${this.m.join(',')})`;
+        // 計算預覽用的矩陣
+        this.matrixArr = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        this.img.style.transform = `matrix3d(${this.matrixArr.join(',')})`;
     },
 
     renderText: function() {
@@ -91,8 +92,9 @@ const App = {
             this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
             this.ctx.fill(); this.ctx.restore();
         }
-        if (lines.length === 1) { this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0); }
-        else { this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120); }
+        this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+        if (lines.length === 1) { this.ctx.scale(0.85, 2.0); this.ctx.fillText(lines[0], 0, 0); }
+        else { this.ctx.scale(0.85, 1.3); this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120); }
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
     },
@@ -101,14 +103,12 @@ const App = {
 
     animate: function() {
         const t = this.v.currentTime;
-        this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
-        this.logo.style.opacity = (t >= this.timing.logoStart && t < 5.8) ? '1' : '0';
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
+        this.logo.style.opacity = (t >= this.timing.logoStart && t < 5.8) ? '1' : '0';
         requestAnimationFrame(() => this.animate());
     },
 
-    // 🔴 實時螢幕錄製邏輯
     startRecording: function() {
         this.isRecording = true;
         document.getElementById('stop-rec-btn').style.display = 'block';
@@ -126,16 +126,14 @@ const App = {
         this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
         this.mediaRecorder.onstop = () => {
             const b = new Blob(this.chunks, { type: 'video/webm' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'Metro_3D_Recording.webm'; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'Metro_AR_Export.webm'; a.click();
         };
 
         const draw = () => {
             if(!this.isRecording) return;
-            const w = recCanvas.width;
-            const h = recCanvas.height;
-            const t = this.v.currentTime;
+            const w = recCanvas.width, h = recCanvas.height, t = this.v.currentTime;
 
-            // 1. 畫背景影片 (模擬 object-fit: cover)
+            // 1. 畫背景 (同步 Cover 效果)
             const vRatio = this.v.videoWidth / this.v.videoHeight;
             const sRatio = w / h;
             let dW, dH, dX, dY;
@@ -143,7 +141,7 @@ const App = {
             else { dH = h; dW = h * vRatio; dX = (w - dW) / 2; dY = 0; }
             recCtx.drawImage(this.v, dX, dY, dW, dH);
 
-            // 2. 畫文字看板 (座標完全同步螢幕預覽)
+            // 2. 畫字 (直接套用 DPR 後的預覽矩陣)
             if (t >= this.timing.start && t < this.timing.hide) {
                 const p = this.pts.map(pt => ({ x: pt.x * w, y: pt.y * h }));
                 const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
@@ -155,21 +153,16 @@ const App = {
                 recCtx.restore();
             }
 
-            // 3. 畫 Logo (同步預覽位置)
+            // 3. 畫 Logo
             if (t >= this.timing.logoStart && t < 5.8) {
-                recCtx.save();
-                recCtx.globalAlpha = 1;
                 const logoSize = 120 * dpr;
-                const margin = 30 * dpr;
-                recCtx.drawImage(this.logo, w - logoSize - margin, h - logoSize - margin, logoSize, logoSize);
-                recCtx.restore();
+                recCtx.drawImage(this.logo, w - logoSize - (30*dpr), h - logoSize - (30*dpr), logoSize, logoSize);
             }
 
             requestAnimationFrame(draw);
         };
 
-        this.v.currentTime = 0;
-        this.v.play();
+        this.v.currentTime = 0; this.v.play();
         this.mediaRecorder.start();
         draw();
     },
