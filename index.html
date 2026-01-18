@@ -3,53 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 滿意穩定版</title>
+    <title>地鐵 3D - 錄影修正穩定版</title>
     <style>
-        :root { --safe-bottom: env(safe-area-inset-bottom); }
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
-        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; cursor: pointer; }
+        .viewport { position: relative; flex: 1; background: #000; overflow: hidden; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
-        
         #canvas-text { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2; pointer-events: none;
             clip-path: inset(0 0 0 100%);
         }
-
-        #kuo-logo { position: absolute; bottom: 30px; right: 30px; width: 100px; opacity: 0; transition: opacity 0.5s; z-index: 99; }
-
-        .ui-bar { 
-            background: rgba(15,15,15,0.95); padding: 15px 20px; 
-            display: flex; flex-direction: column; gap: 12px; border-top: 1px solid #333; 
-            padding-bottom: calc(var(--safe-bottom) + 5px); transition: transform 0.4s ease;
-        }
-        .ui-hide { transform: translateY(100%); display: none; }
-        
+        .ui-bar { background: #000; padding: 15px; display: flex; flex-direction: column; gap: 15px; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
         .row { display: flex; gap: 10px; align-items: center; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 10px; font-size: 16px; }
-        .cp-wrap { display: flex; align-items: center; gap: 5px; color: #888; font-size: 12px; }
-        input[type="color"] { width: 30px; height: 30px; border: none; background: none; }
-        .main-btn { background: #fff; color: #000; border: none; padding: 12px 25px; border-radius: 10px; font-weight: bold; cursor: pointer; flex: 1; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 15px; border-radius: 12px; font-size: 16px; }
+        .rec-btn { width: 65px; height: 65px; border: 5px solid #fff; background: #ff3b30; border-radius: 50%; cursor: pointer; margin: 0 auto; display: block; }
+        
+        /* 強制停止按鈕 */
+        #stop-rec-overlay { 
+            position: fixed; top: 40px; left: 50%; transform: translateX(-50%); 
+            background: #ff3b30; color: white; padding: 10px 25px; 
+            border-radius: 50px; font-weight: bold; z-index: 2000; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: none;
+            border: 2px solid white;
+        }
     </style>
 </head>
 <body>
 
+<div id="stop-rec-overlay" onclick="App.forceStop()">⏹ 正在錄製 (點擊強制停止)</div>
+
 <div class="app-container">
-    <div class="viewport" onclick="App.toggleUI()">
+    <div class="viewport" id="stage">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
         <img id="canvas-text">
-        <img id="kuo-logo" src="IMG_6604.png">
     </div>
 
     <div class="ui-bar" id="ui">
         <div class="row">
-            <input type="text" id="userInput" placeholder="輸入文字..." value="新年快樂" oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
+            <input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
         </div>
         <div class="row">
-            <div class="cp-wrap"><input type="color" id="textColor" value="#ffffff" oninput="App.renderText()"> 字</div>
-            <div class="cp-wrap"><input type="color" id="bgColor" value="#000000" oninput="App.renderText()"> 底</div>
-            <button class="main-btn" onclick="App.toggleUI(true)">進入展示模式</button>
+            <div class="rec-btn" onclick="App.startRecording()"></div>
         </div>
     </div>
 </div>
@@ -58,98 +54,126 @@
 
 <script>
 const App = {
-    // 鎖定原始影片比例座標
-    rawPts: [{x: 0.38, y: 0.33}, {x: 0.92, y: 0.24}, {x: 0.92, y: 0.76}, {x: 0.38, y: 0.61}],
-    timing: { start: 2.50, end: 3.90, hide: 5.35 },
+    pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
+    timing: { start: 2.55, end: 3.83, hide: 5.35, stop: 5.8 },
+    isRecording: false,
 
     init: function() {
         this.v = document.getElementById('v');
         this.img = document.getElementById('canvas-text');
         this.txtCvs = document.getElementById('text-canvas');
         this.ctx = this.txtCvs.getContext('2d');
+        this.stage = document.getElementById('stage');
         
         window.addEventListener('resize', () => this.updateWarp());
-        this.v.onloadedmetadata = () => this.updateWarp();
+        this.updateWarp();
         this.renderText();
-        this.v.play();
         this.animate();
     },
 
     updateWarp: function() {
-        const vw = this.v.videoWidth || 1920, vh = this.v.videoHeight || 1080;
-        const rect = this.v.getBoundingClientRect();
-        const vRatio = vw / vh, sRatio = rect.width / rect.height;
-        let scale, ox = 0, oy = 0;
-
-        if (sRatio > vRatio) {
-            scale = rect.width / vw;
-            oy = (rect.height - vh * scale) / 2;
-        } else {
-            scale = rect.height / vh;
-            ox = (rect.width - vw * scale) / 2;
-        }
-
-        const p = this.rawPts.map(pt => ({
-            x: pt.x * vw * scale + ox,
-            y: pt.y * vh * scale + oy
-        }));
-
+        const r = this.stage.getBoundingClientRect();
+        const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
         const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
 
     renderText: function() {
         this.txtCvs.width = 1800; this.txtCvs.height = 800;
-        const txt = document.getElementById('userInput').value;
-        const bc = document.getElementById('bgColor').value;
-        
-        // 透明底色處理
-        this.ctx.fillStyle = bc + 'CC'; 
-        this.ctx.fillRect(0, 0, 1800, 800);
-
-        const lines = [];
-        for (let i = 0; i < txt.length; i += 7) lines.push(txt.substring(i, i+7));
-
+        const txt = document.getElementById('userInput').value || "白六祝大家新年快樂";
+        this.ctx.clearRect(0,0,1800,800);
         this.ctx.save();
-        this.ctx.textAlign = 'right';
-        this.ctx.textBaseline = 'middle';
+        this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle';
         this.ctx.fillStyle = document.getElementById('textColor').value;
-
-        let fontSize = lines.length === 1 ? 350 : 200;
-        let scaleY = lines.length === 1 ? 2.1 : 1.5;
-        let lineHeight = 240;
-
-        this.ctx.font = `900 ${fontSize}px sans-serif`;
-        const startY = 400 - ((lines.length - 1) * lineHeight) / 2;
-
-        lines.forEach((line, i) => {
-            this.ctx.save();
-            this.ctx.translate(1720, startY + (i * lineHeight));
-            this.ctx.scale(0.9, scaleY);
-            this.ctx.fillText(line, 0, 0);
-            this.ctx.restore();
-        });
+        this.ctx.font = '900 320px sans-serif';
+        this.ctx.scale(0.8, 1.8);
+        this.ctx.fillText(txt, 0, 0);
         this.ctx.restore();
         this.img.src = this.txtCvs.toDataURL();
     },
 
     animate: function() {
+        if(this.isRecording) return;
         const t = this.v.currentTime;
-        let prog = (t - this.timing.start) / (this.timing.end - this.timing.start);
-        prog = Math.pow(Math.max(0, Math.min(1, prog)), 0.85);
-
-        this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 
-            'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
-
-        document.getElementById('kuo-logo').style.opacity = (t > 2.8) ? '1' : '0';
+        const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
+        this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
         requestAnimationFrame(() => this.animate());
     },
 
-    toggleUI: function(hide = false) {
-        const ui = document.getElementById('ui');
-        if(hide) ui.classList.add('ui-hide');
-        else ui.classList.toggle('ui-hide');
-        if(!ui.classList.contains('ui-hide')) this.updateWarp();
+    startRecording: function() {
+        if(this.isRecording) return;
+        this.isRecording = true;
+        
+        const overlay = document.getElementById('stop-rec-overlay');
+        overlay.style.display = 'block';
+
+        const dpr = 1.5; // 調降 DPR 確保錄製成功率
+        const outCanvas = document.createElement('canvas');
+        const w = this.stage.clientWidth;
+        const h = this.stage.clientHeight;
+        outCanvas.width = w * dpr;
+        outCanvas.height = h * dpr;
+        const outCtx = outCanvas.getContext('2d');
+
+        const stream = outCanvas.captureStream(30);
+        this.recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        this.chunks = [];
+
+        this.recorder.ondataavailable = e => { if(e.data.size > 0) this.chunks.push(e.data); };
+        
+        this.recorder.onstop = () => {
+            const b = new Blob(this.chunks, { type: 'video/webm' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(b);
+            a.download = 'Metro_Video.webm';
+            a.click();
+            
+            this.isRecording = false;
+            overlay.style.display = 'none';
+            this.v.loop = true;
+            this.animate();
+        };
+
+        const draw = () => {
+            if(!this.isRecording) return;
+            const t = this.v.currentTime;
+
+            // 背景影片
+            outCtx.drawImage(this.v, 0, 0, outCanvas.width, outCanvas.height);
+
+            // 文字
+            if (t >= this.timing.start && t < this.timing.hide) {
+                const p = this.pts.map(pt => ({ x: pt.x * outCanvas.width, y: pt.y * outCanvas.height }));
+                const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+                outCtx.save();
+                outCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
+                const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
+                const clipX = 1800 * (1 - prog);
+                outCtx.drawImage(this.txtCvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
+                outCtx.restore();
+            }
+
+            // 自動停止偵測
+            if (t >= this.timing.stop) {
+                this.forceStop();
+            } else {
+                requestAnimationFrame(draw);
+            }
+        };
+
+        this.v.pause();
+        this.v.currentTime = 0;
+        this.v.loop = false;
+        this.v.play().then(() => {
+            this.recorder.start();
+            draw();
+        });
+    },
+
+    forceStop: function() {
+        if(this.recorder && this.recorder.state === 'recording') {
+            this.recorder.stop();
+        }
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
