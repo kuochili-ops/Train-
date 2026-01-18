@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - Logo 顯示修正版</title>
+    <title>地鐵 3D - Logo 提早呈現版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -14,14 +14,15 @@
             transform-origin: 0 0; z-index: 2; pointer-events: none;
             clip-path: inset(0 0 0 100%);
         }
-        /* Logo 樣式：確保 z-index 在最上層 */
+        /* Logo 樣式：增加 1 秒的漸顯過渡 */
         #kuo-logo { 
             position: absolute; 
             bottom: 30px; 
             right: 30px; 
             width: 120px; 
             z-index: 99; 
-            display: none; /* 初始隱藏 */
+            opacity: 0; 
+            transition: opacity 1s ease-in-out; 
             pointer-events: none;
         }
         .ui-bar { background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; }
@@ -57,11 +58,13 @@
 
 <script>
 const App = {
+    // 鎖定完美的垂直定位點
     pts: [
         {x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, 
         {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}
     ],
-    timing: { start: 2.55, end: 3.83, logoStart: 4.8, hide: 5.35 }, 
+    // Logo 提前至 3.8s 出現
+    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35 }, 
 
     init: function() {
         this.v = document.getElementById('v');
@@ -73,9 +76,6 @@ const App = {
         this.updateWarp();
         this.renderText();
         this.animate();
-        
-        // 額外檢查圖片載入狀態
-        this.logo.onerror = () => console.error("Logo 圖片載入失敗，請檢查 IMG_6604.png 是否存在");
     },
 
     updateWarp: function() {
@@ -131,20 +131,19 @@ const App = {
 
     animate: function() {
         const t = this.v.currentTime;
-        
-        // 1. 看板顯示控制
         const isOut = t >= this.timing.hide;
+        
+        // 看板顯示
         this.img.style.display = isOut ? 'none' : 'block';
         
-        // 2. Logo 顯示控制 (強制切換顯示，避免 transition 問題)
+        // Logo 顯示 (3.8s 開始漸顯)
         if (t >= this.timing.logoStart && t < 5.8) {
-            this.logo.style.display = 'block';
             this.logo.style.opacity = '1';
         } else {
-            this.logo.style.display = 'none';
+            this.logo.style.opacity = '0';
         }
         
-        // 3. 翻牌動畫
+        // 翻牌動畫
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = isOut ? 'inset(0 0 0 100%)' : ((t < this.timing.start) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`);
         
