@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 穩定分享版</title>
+    <title>地鐵 3D - 縱比自適應版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; cursor: pointer; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
+        
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
             transform-origin: 0 0; z-index: 2; pointer-events: none;
@@ -21,12 +22,12 @@
         }
         .ui-bar { 
             background: #111; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; 
-            transition: transform 0.4s ease;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             padding-bottom: calc(var(--safe-bottom) + 5px);
         }
-        .ui-hide { transform: translateY(100%); display: none; }
+        .ui-hide { transform: translateY(100%); position: absolute; bottom: 0; width: 100%; visibility: hidden; }
         .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 13px; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
         input[type="color"] { width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
         .btn-row { display: flex; gap: 8px; }
         button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
@@ -59,8 +60,9 @@
 
 <script>
 const App = {
-    pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
-    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35, stop: 5.8 },
+    // 原始 16:9 影片中的座標百分比
+    rawPts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
+    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35 },
 
     init: function() {
         this.v = document.getElementById('v');
@@ -69,23 +71,43 @@ const App = {
         this.logo = document.getElementById('kuo-logo');
         this.ctx = this.cvs.getContext('2d');
 
-        // 讀取 URL 參數
         const params = new URLSearchParams(window.location.search);
         if(params.has('t')) document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
         if(params.has('tc')) document.getElementById('textColor').value = '#' + params.get('tc');
         if(params.has('bc')) document.getElementById('bgColor').value = '#' + params.get('bc');
-        if(params.get('m') === 's') this.toggleUI(true);
+        if(params.get('m') === 's') setTimeout(() => this.toggleUI(true), 500);
 
         window.addEventListener('resize', () => this.updateWarp());
-        this.updateWarp();
+        this.v.onloadedmetadata = () => this.updateWarp();
+        
         this.renderText();
         this.v.play();
         this.animate();
     },
 
     updateWarp: function() {
-        const r = document.getElementById('stage').getBoundingClientRect();
-        const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
+        const vw = this.v.videoWidth || 1920, vh = this.v.videoHeight || 1080;
+        const rect = document.getElementById('stage').getBoundingClientRect();
+        
+        // 核心邏輯：計算 object-fit: cover 造成的位移與縮放比例
+        const vRatio = vw / vh;
+        const sRatio = rect.width / rect.height;
+        let scale, ox = 0, oy = 0;
+
+        if (sRatio > vRatio) {
+            scale = rect.width / vw;
+            oy = (rect.height - vh * scale) / 2;
+        } else {
+            scale = rect.height / vh;
+            ox = (rect.width - vw * scale) / 2;
+        }
+
+        // 將原始座標映射到當前裁切後的畫面
+        const p = this.rawPts.map(pt => ({
+            x: pt.x * vw * scale + ox,
+            y: pt.y * vh * scale + oy
+        }));
+
         const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
@@ -97,10 +119,10 @@ const App = {
         const textColor = document.getElementById('textColor').value;
         this.ctx.clearRect(0, 0, 1800, 800);
         this.ctx.save();
+        
         let lines = (rawTxt.length <= 6) ? [rawTxt] : [rawTxt.substring(0, Math.ceil(rawTxt.length/2)), rawTxt.substring(Math.ceil(rawTxt.length/2))];
         this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
         
-        // 依照您要求的版本，底色 logic 完全不修改
         if (bgColor !== "#000000") {
             this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
             let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
@@ -126,8 +148,12 @@ const App = {
 
     toggleUI: function(forceHide = false) {
         const ui = document.getElementById('ui');
-        if(forceHide) ui.classList.add('ui-hide');
-        else ui.classList.toggle('ui-hide');
+        const isHidden = ui.classList.contains('ui-hide');
+        if(forceHide || !isHidden) ui.classList.add('ui-hide');
+        else ui.classList.remove('ui-hide');
+        
+        // 比例改變後延遲重新校準透視
+        setTimeout(() => this.updateWarp(), 100);
     },
 
     copyShareLink: function() {
@@ -136,7 +162,7 @@ const App = {
         const bc = document.getElementById('bgColor').value.replace('#','');
         const url = `${window.location.origin}${window.location.pathname}?t=${t}&tc=${tc}&bc=${bc}&m=s`;
         navigator.clipboard.writeText(url).then(() => {
-            alert('分享連結已複製！進入該連結將自動隱藏介面。');
+            alert('分享連結已複製！');
             this.toggleUI(true);
         });
     },
