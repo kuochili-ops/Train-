@@ -3,32 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 穩定錄製修復版</title>
+    <title>地鐵 3D - 穩定錄製修正版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; perspective: 2200px; }
-        
         video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         #canvas-image { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
-            transform-origin: 0 0; z-index: 2;
+            transform-origin: 0 0; z-index: 2; pointer-events: none;
             clip-path: inset(0 0 0 100%); 
-            pointer-events: none;
         }
-
-        #kuo-end-img {
-            position: absolute; bottom: 25px; right: 25px; width: 120px;
-            z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen;
-        }
-
-        /* UI 介面維持原樣 */
-        .ui-bar { background: rgba(10, 10, 10, 0.95); padding: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; border-top: 1px solid #333; }
+        #kuo-end-img { position: absolute; bottom: 25px; right: 25px; width: 120px; z-index: 999; opacity: 0; transition: 0.8s; mix-blend-mode: screen; }
+        .ui-bar { background: #111; padding: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; border-top: 1px solid #333; }
         .row { display: flex; gap: 8px; align-items: center; color: #fff; font-size: 12px; }
-        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 8px; outline: none; }
-        input[type="color"] { width: 35px; height: 35px; border: none; background: none; cursor: pointer; }
-        .btn-row { display: flex; gap: 8px; width: 100%; }
-        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
+        input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 8px; }
+        input[type="color"] { width: 35px; height: 35px; border: none; background: none; }
+        .btn-row { display: flex; gap: 8px; }
+        button { flex: 1; padding: 14px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
         .preview-btn { background: #333; color: white; }
         .record-btn { background: #FF3B30; color: #fff; }
     </style>
@@ -49,8 +41,8 @@
             <input type="text" id="userInput" placeholder="輸入文字..." oninput="App.renderText()">
         </div>
         <div class="btn-row">
-            <button class="preview-btn" onclick="App.play()">播放預覽</button>
-            <button class="record-btn" id="recBtn" onclick="App.startCapture()">錄製導出</button>
+            <button class="preview-btn" onclick="App.play()">預覽</button>
+            <button class="record-btn" id="recBtn" onclick="App.startCapture()">開始錄製</button>
         </div>
     </div>
 </div>
@@ -59,23 +51,15 @@
 
 <script>
 const App = {
-    // 您的核心透視參數 (文字上移已包含)
-    pts: [
-        {x: 0.05, y: 0.35}, {x: 0.99, y: 0.18}, 
-        {x: 0.98, y: 0.74}, {x: 0.04, y: 0.55}
-    ],
-    timing: { start: 2.55, end: 3.83 }, 
+    pts: [{x: 0.05, y: 0.35}, {x: 0.99, y: 0.18}, {x: 0.98, y: 0.74}, {x: 0.04, y: 0.55}],
+    timing: { start: 2.55, end: 3.83 },
     
     init: function() {
         this.v = document.getElementById('v');
         this.img = document.getElementById('canvas-image');
         this.logoImg = document.getElementById('kuo-end-img');
-        this.input = document.getElementById('userInput');
-        this.colorPicker = document.getElementById('textColor');
-        this.bgPicker = document.getElementById('bgColor');
-        this.tempCvs = document.getElementById('temp-cvs');
-        this.tCtx = this.tempCvs.getContext('2d');
-        
+        this.cvs = document.getElementById('temp-cvs');
+        this.ctx = this.cvs.getContext('2d');
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.renderText();
@@ -84,112 +68,104 @@ const App = {
 
     updateWarp: function() {
         const r = document.getElementById('stage').getBoundingClientRect();
-        // 將 1800x800 的文字畫布映射到螢幕透視點
         const p = this.pts.map(pt => ({ x: pt.x * r.width, y: pt.y * r.height }));
         this.m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${this.m.join(',')})`;
     },
 
     renderText: function() {
-        this.tempCvs.width = 1800; this.tempCvs.height = 800;
-        const txt = this.input.value || "震撼地鐵";
-        this.tCtx.clearRect(0, 0, 1800, 800);
-        
-        this.tCtx.save();
-        this.tCtx.translate(1790, 385); // 文字上移設定
-        this.tCtx.scale(0.6, 1.6);
-        this.tCtx.textAlign = 'right'; this.tCtx.textBaseline = 'middle';
-        this.tCtx.font = '900 420px "Microsoft JhengHei", sans-serif';
-
-        const tw = this.tCtx.measureText(txt).width;
-        // 底色
-        this.tCtx.fillStyle = this.bgPicker.value + "CC";
-        this.tCtx.beginPath();
-        this.tCtx.roundRect(-tw - 20, -210, tw + 40, 420, 20);
-        this.tCtx.fill();
-
-        // 字色
-        this.tCtx.fillStyle = this.colorPicker.value;
-        this.tCtx.fillText(txt, 0, 0);
-        this.tCtx.restore();
-        
-        this.img.src = this.tempCvs.toDataURL();
+        this.cvs.width = 1800; this.cvs.height = 800;
+        const txt = document.getElementById('userInput').value || "震撼地鐵";
+        this.ctx.clearRect(0,0,1800,800);
+        this.ctx.save();
+        this.ctx.translate(1790, 385);
+        this.ctx.scale(0.6, 1.6);
+        this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle';
+        this.ctx.font = '900 420px sans-serif';
+        const tw = this.ctx.measureText(txt).width;
+        this.ctx.fillStyle = document.getElementById('bgColor').value + "CC";
+        this.ctx.roundRect(-tw - 20, -210, tw + 40, 420, 20);
+        this.ctx.fill();
+        this.ctx.fillStyle = document.getElementById('textColor').value;
+        this.ctx.fillText(txt, 0, 0);
+        this.ctx.restore();
+        this.img.src = this.cvs.toDataURL();
     },
 
     play: function() { this.v.currentTime = 0; this.v.play(); },
 
     animate: function() {
         const cur = this.v.currentTime;
-        // 浮水印顯示
-        this.logoImg.style.opacity = (cur >= (this.v.duration || 5.5) - 1.8) ? '1' : '0';
-        // 進場動畫
+        this.logoImg.style.opacity = (cur >= 4.8) ? '1' : '0';
         const prog = Math.max(0, Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start)));
         this.img.style.clipPath = (cur < this.timing.start) ? 'inset(0 0 0 100%)' : (cur > this.timing.end ? 'inset(0 0 0 0%)' : `inset(0 0 0 ${100 - prog*100}%)`);
         requestAnimationFrame(() => this.animate());
     },
 
-    // 參考狗狗黑板優化後的錄製功能
     startCapture: async function() {
         const btn = document.getElementById('recBtn');
         btn.innerText = "錄製中..."; btn.disabled = true;
 
         const exportCanvas = document.createElement('canvas');
-        // 自動抓取影片原始解析度，解決偏移故障
-        exportCanvas.width = this.v.videoWidth || 720; 
+        exportCanvas.width = this.v.videoWidth || 720;
         exportCanvas.height = this.v.videoHeight || 1280;
         const eCtx = exportCanvas.getContext('2d');
-        
-        // 支援 webm (相容性較佳)
-        const stream = exportCanvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
-        const chunks = [];
-        
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); 
-            a.download = `Subway_3D_${Date.now()}.webm`; 
-            a.click();
+
+        // 自動檢測設備支援的格式 [cite: 2026-01-18]
+        const types = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+        const supportedType = types.find(t => MediaRecorder.isTypeSupported(t));
+
+        if (!supportedType) {
+            alert("您的設備不支援網頁錄影。");
             btn.innerText = "錄製"; btn.disabled = false;
-        };
+            return;
+        }
 
-        this.v.currentTime = 0;
-        await this.v.play();
-        recorder.start();
+        try {
+            const stream = exportCanvas.captureStream(30);
+            const recorder = new MediaRecorder(stream, { mimeType: supportedType, bitsPerSecond: 8000000 });
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: supportedType });
+                const ext = supportedType.includes('mp4') ? 'mp4' : 'webm';
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `Subway_3D.${ext}`; a.click();
+                btn.innerText = "錄製"; btn.disabled = false;
+            };
 
-        const renderLoop = () => {
-            if (recorder.state === "recording") {
-                // 1. 畫底層影片
-                eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
-                
-                // 2. 畫 3D 文字層
-                const cur = this.v.currentTime;
-                if (cur >= this.timing.start) {
-                    const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
-                    eCtx.save();
-                    // 核心修正：計算匯出畫布與預覽螢幕的比例係數
-                    const scale = exportCanvas.width / 1800; 
-                    // 應用 3D 矩陣
-                    eCtx.setTransform(this.m[0]*scale, this.m[1]*scale, this.m[4]*scale, this.m[5]*scale, this.m[12]*scale, this.m[13]*scale);
-                    eCtx.globalAlpha = prog;
-                    eCtx.drawImage(this.tempCvs, 0, 0);
-                    eCtx.restore();
+            this.v.currentTime = 0;
+            await this.v.play();
+            recorder.start();
+
+            const renderLoop = () => {
+                if (recorder.state === "recording") {
+                    eCtx.drawImage(this.v, 0, 0, exportCanvas.width, exportCanvas.height);
+                    const cur = this.v.currentTime;
+                    if (cur >= this.timing.start) {
+                        const prog = Math.min(1, (cur - this.timing.start) / (this.timing.end - this.timing.start));
+                        eCtx.save();
+                        const s = exportCanvas.width / 1800;
+                        eCtx.setTransform(this.m[0]*s, this.m[1]*s, this.m[4]*s, this.m[5]*s, this.m[12]*s, this.m[13]*s);
+                        eCtx.globalAlpha = prog;
+                        eCtx.drawImage(this.cvs, 0, 0);
+                        eCtx.restore();
+                    }
+                    if (this.logoImg.style.opacity === '1') {
+                        eCtx.drawImage(this.logoImg, exportCanvas.width - 150, exportCanvas.height - 150, 120, 120);
+                    }
+                    if (this.v.ended || cur > 5.5) recorder.stop();
+                    else requestAnimationFrame(renderLoop);
                 }
-                
-                // 3. 畫結尾浮水印
-                if (this.logoImg.style.opacity === '1') {
-                    eCtx.drawImage(this.logoImg, exportCanvas.width - 150, exportCanvas.height - 150, 120, 120);
-                }
-
-                if (this.v.ended || cur > 5.4) recorder.stop();
-                else requestAnimationFrame(renderLoop);
-            }
-        };
-        renderLoop();
+            };
+            renderLoop();
+        } catch (err) {
+            alert("錄製錯誤: " + err.message);
+            btn.innerText = "錄製"; btn.disabled = false;
+        }
     },
 
-    // 3D 矩陣計算法
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
         const a = [[x1,y1,1,0,0,0,-px1*x1,-px1*y1],[0,0,0,x1,y1,1,-py1*x1,-py1*y1],[x2,y2,1,0,0,0,-px2*x2,-px2*y2],[0,0,0,x2,y2,1,-py2*x2,-py2*y2],[x3,y3,1,0,0,0,-px3*x3,-px3*y3],[0,0,0,x3,y3,1,-py3*x3,-py3*y3],[x4,y4,1,0,0,0,-px4*x4,-px4*y4],[0,0,0,x4,y4,1,-py4*x4,-py4*y4]];
         const b = [px1,py1,px2,py2,px3,py3,px4,py4];
@@ -203,7 +179,6 @@ const App = {
         return [x[0],x[3],0,x[6],x[1],x[4],0,x[7],0,0,1,0,x[2],x[5],0,1];
     }
 };
-
 window.onload = () => App.init();
 </script>
 </body>
