@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地鐵 3D - 錄影最終修正版</title>
+    <title>地鐵 3D - 比例同步最終版</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
@@ -26,19 +26,12 @@
         button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
         .preview-btn { background: #333; color: white; }
         .rec-btn { background: #ff0000; color: white; }
-        
-        /* 錄製狀態提示 */
-        #rec-status { 
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%); 
-            background: rgba(255,0,0,0.9); color: white; padding: 10px 20px; 
-            border-radius: 50px; font-weight: bold; z-index: 1000; display: none;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
+        #rec-status { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: red; color: white; padding: 10px 20px; border-radius: 50px; display: none; z-index: 1000; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="rec-status">🔴 錄製導出中... 請稍候</div>
+<div id="rec-status">🔴 正在錄製直式影片...</div>
 
 <div class="app-container">
     <div class="viewport" id="stage">
@@ -65,14 +58,13 @@
 const App = {
     pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
     timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35, stop: 5.8 }, 
-    isRecording: false,
 
     init: function() {
         this.v = document.getElementById('v');
         this.img = document.getElementById('canvas-image');
         this.cvs = document.getElementById('offscreen');
         this.logo = document.getElementById('kuo-logo');
-        this.ctx = this.cvs.getContext('2d', { willReadFrequently: true });
+        this.ctx = this.cvs.getContext('2d');
         window.addEventListener('resize', () => this.updateWarp());
         this.updateWarp();
         this.renderText();
@@ -95,7 +87,6 @@ const App = {
         this.ctx.save();
         let lines = (rawTxt.length <= 6) ? [rawTxt] : [rawTxt.substring(0, Math.ceil(rawTxt.length/2)), rawTxt.substring(Math.ceil(rawTxt.length/2))];
         this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
-        
         if (bgColor !== "#000000") {
             this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
             let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
@@ -103,14 +94,10 @@ const App = {
             this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
             this.ctx.fill(); this.ctx.restore();
         }
-        
-        if (lines.length === 1) { 
-            this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0); 
-        } else { 
-            this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120); 
-        }
+        if (lines.length === 1) { this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0); }
+        else { this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120); }
         this.ctx.restore();
-        this.img.src = this.cvs.toDataURL(); // 供預覽用
+        this.img.src = this.cvs.toDataURL();
     },
 
     play: function() { this.v.currentTime = 0; this.v.play(); },
@@ -126,38 +113,30 @@ const App = {
     },
 
     startRecording: function() {
-        if (this.isRecording) return;
         this.isRecording = true;
-        
         const status = document.getElementById('rec-status');
-        const btn = document.getElementById('recBtn');
+        const stage = document.getElementById('stage');
         status.style.display = 'block';
-        btn.disabled = true;
 
-        const recW = 1920; const recH = 1080;
+        // 🛠️ 重點：使用螢幕實際顯示的寬高與 DPR
+        const dpr = window.devicePixelRatio || 1;
+        const recW = stage.clientWidth * dpr;
+        const recH = stage.clientHeight * dpr;
+
         const recCanvas = document.createElement('canvas');
         recCanvas.width = recW; recCanvas.height = recH;
         const recCtx = recCanvas.getContext('2d');
 
         const stream = recCanvas.captureStream(30);
-        // 使用相容性最高的 mp4 或 webm 格式
-        const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-        this.mediaRecorder = new MediaRecorder(stream, { mimeType });
+        this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
         this.chunks = [];
-
-        this.mediaRecorder.ondataavailable = e => { if(e.data.size > 0) this.chunks.push(e.data); };
+        this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
         
         this.mediaRecorder.onstop = () => {
-            const b = new Blob(this.chunks, { type: this.mediaRecorder.mimeType });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(b);
-            a.download = `Metro_KUO_${Date.now()}.webm`;
-            a.click();
-            
-            // 重置 UI
-            this.isRecording = false;
+            const b = new Blob(this.chunks, { type: 'video/webm' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'Metro_Portrait.webm'; a.click();
             status.style.display = 'none';
-            btn.disabled = false;
+            this.isRecording = false;
             this.v.loop = true;
             this.animate();
         };
@@ -166,21 +145,22 @@ const App = {
             if(!this.isRecording) return;
             const t = this.v.currentTime;
 
-            // 1. 畫底色與影片
-            recCtx.fillStyle = "#000";
-            recCtx.fillRect(0, 0, recW, recH);
-            recCtx.drawImage(this.v, 0, 0, recW, recH);
+            // 1. 畫背景影片 (模擬 object-fit: cover)
+            const vRatio = this.v.videoWidth / this.v.videoHeight;
+            const sRatio = recW / recH;
+            let dW, dH, dX, dY;
+            if (sRatio > vRatio) { dW = recW; dH = recW / vRatio; dX = 0; dY = (recH - dH) / 2; }
+            else { dH = recH; dW = recH * vRatio; dX = (recW - dW) / 2; dY = 0; }
+            recCtx.drawImage(this.v, dX, dY, dW, dH);
 
-            // 2. 畫文字看板 (直接從 offscreen 畫布抓取，確保 100% 有字)
+            // 2. 畫文字看板 (座標完全與預覽同步)
             if (t >= this.timing.start && t < this.timing.hide) {
                 const p = this.pts.map(pt => ({ x: pt.x * recW, y: pt.y * recH }));
                 const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
                 recCtx.save();
                 recCtx.setTransform(m[0], m[1], m[4], m[5], m[12], m[13]);
-                
                 const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
                 const clipX = 1800 * (1 - prog);
-                // 裁切繪製
                 recCtx.drawImage(this.cvs, clipX, 0, 1800 - clipX, 800, clipX, 0, 1800 - clipX, 800);
                 recCtx.restore();
             }
@@ -189,11 +169,12 @@ const App = {
             if (t >= this.timing.logoStart && t < 5.8) {
                 recCtx.save();
                 recCtx.globalAlpha = Math.min(1, (t - this.timing.logoStart) / 0.5);
-                recCtx.drawImage(this.logo, recW - 180, recH - 180, 130, 130);
+                const logoS = 120 * dpr;
+                recCtx.drawImage(this.logo, recW - logoS - (30*dpr), recH - logoS - (30*dpr), logoS, logoS);
                 recCtx.restore();
             }
 
-            // 停止判斷
+            // 🛠️ 確保會停止
             if (t >= this.timing.stop || this.v.ended) {
                 this.mediaRecorder.stop();
             } else {
@@ -201,19 +182,9 @@ const App = {
             }
         };
 
-        // 啟動錄製
-        this.v.pause();
-        this.v.currentTime = 0;
-        this.v.loop = false;
-        this.v.play().then(() => {
-            this.mediaRecorder.start();
-            draw();
-        });
-
-        // 最終超時保護 (8秒後強制停止，防止卡死)
-        setTimeout(() => {
-            if (this.isRecording) this.mediaRecorder.stop();
-        }, 8000);
+        this.v.pause(); this.v.currentTime = 0; this.v.play();
+        this.mediaRecorder.start();
+        draw();
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
