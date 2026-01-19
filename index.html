@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 智慧排版版</title>
+    <title>地鐵 3D - 穩定分享版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -49,11 +49,11 @@
         <div class="row">
             字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
             底：<input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
-            <input type="text" id="userInput" placeholder="輸入文字..." value="HAPPY NEW YEAR" oninput="App.renderText()">
+            <input type="text" id="userInput" placeholder="輸入文字..." value="新年快樂" oninput="App.renderText()">
         </div>
         <div class="btn-row">
-            <button class="share-btn" onclick="App.copyShareLink()">複製分享連結 (唯讀)</button>
-            <button class="hide-btn" onclick="App.toggleUI(true)">進入展示模式</button>
+            <button class="share-btn" onclick="App.copyShareLink()">複製分享連結</button>
+            <button class="hide-btn" onclick="App.toggleUI(true)">預覽展示</button>
         </div>
     </div>
 </div>
@@ -75,9 +75,16 @@ const App = {
         this.ui = document.getElementById('ui');
 
         const params = new URLSearchParams(window.location.search);
-        if(params.has('t')) document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
-        if(params.has('tc')) document.getElementById('textColor').value = '#' + params.get('tc');
-        if(params.has('bc')) document.getElementById('bgColor').value = '#' + params.get('bc');
+        
+        // 使用 Base64 解碼文字參數
+        if(params.has('data')) {
+            try {
+                const decodedData = JSON.parse(atob(params.get('data')));
+                document.getElementById('userInput').value = decodedData.t;
+                document.getElementById('textColor').value = decodedData.tc;
+                document.getElementById('bgColor').value = decodedData.bc;
+            } catch(e) { console.log("Data decode failed"); }
+        }
         
         if(params.get('m') === 's') {
             this.isReadonly = true;
@@ -90,10 +97,12 @@ const App = {
         this.renderText();
         this.v.play();
         this.animate();
-        setTimeout(() => this.updateWarp(), 500);
+        
+        // 重要：確保文字渲染與座標校準執行兩次以防加載延遲
+        setTimeout(() => { this.renderText(); this.updateWarp(); }, 100);
+        setTimeout(() => { this.renderText(); this.updateWarp(); }, 600);
     },
 
-    // 計算權重：2個英文字母 = 1個中文字
     getStringWeight: function(str) {
         let weight = 0;
         for (let i = 0; i < str.length; i++) {
@@ -112,47 +121,29 @@ const App = {
         
         const totalWeight = this.getStringWeight(rawTxt);
         let lines = [];
-        
-        // 依照權重決定是否換行 (總權重 > 6 就換行)
         if (totalWeight <= 6) {
             lines = [rawTxt];
         } else {
-            // 尋找接近一半權重的位置進行切割
-            let currentWeight = 0;
-            let splitIndex = 0;
+            let currentWeight = 0, splitIndex = 0;
             for (let i = 0; i < rawTxt.length; i++) {
                 currentWeight += rawTxt.charCodeAt(i) > 255 ? 1 : 0.5;
-                if (currentWeight >= totalWeight / 2) {
-                    splitIndex = i + 1;
-                    break;
-                }
+                if (currentWeight >= totalWeight / 2) { splitIndex = i + 1; break; }
             }
             lines = [rawTxt.substring(0, splitIndex).trim(), rawTxt.substring(splitIndex).trim()];
         }
 
         this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
-        
         if (bgColor !== "#000000") {
             this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
-            let maxW = 0; 
-            this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
-            lines.forEach(l => { 
-                let w = this.ctx.measureText(l).width * 0.85; 
-                if(w > maxW) maxW = w; 
-            });
+            let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+            lines.forEach(l => { let w = this.ctx.measureText(l).width * 0.85; if(w > maxW) maxW = w; });
             this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
             this.ctx.fill(); this.ctx.restore();
         }
-        
         if (lines.length === 1) { 
-            this.ctx.scale(0.85, 2.0); 
-            this.ctx.font = '900 350px sans-serif'; 
-            this.ctx.fillText(lines[0], 0, 0); 
+            this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0); 
         } else { 
-            this.ctx.scale(0.85, 1.3); 
-            this.ctx.font = '900 240px sans-serif'; 
-            this.ctx.fillText(lines[0], 0, -120); 
-            this.ctx.fillText(lines[1], 0, 120); 
+            this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120); 
         }
         this.ctx.restore();
         this.img.src = this.cvs.toDataURL();
@@ -165,12 +156,7 @@ const App = {
         let scale, ox = 0, oy = 0;
         if (sRatio > vRatio) { scale = rect.width / vw; oy = (rect.height - vh * scale) / 2; }
         else { scale = rect.height / vh; ox = (rect.width - vw * scale) / 2; }
-
-        const p = this.pts.map(pt => ({
-            x: pt.x * vw * scale + ox,
-            y: pt.y * vh * scale + oy
-        }));
-
+        const p = this.pts.map(pt => ({ x: pt.x * vw * scale + ox, y: pt.y * vh * scale + oy }));
         const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
         this.img.style.transform = `matrix3d(${m.join(',')})`;
     },
@@ -190,11 +176,16 @@ const App = {
     },
 
     copyShareLink: function() {
-        const t = encodeURIComponent(document.getElementById('userInput').value);
-        const tc = document.getElementById('textColor').value.replace('#','');
-        const bc = document.getElementById('bgColor').value.replace('#','');
-        const url = `${window.location.origin}${window.location.pathname}?t=${t}&tc=${tc}&bc=${bc}&m=s`;
-        navigator.clipboard.writeText(url).then(() => alert('智慧排版分享連結已複製！'));
+        const data = {
+            t: document.getElementById('userInput').value,
+            tc: document.getElementById('textColor').value,
+            bc: document.getElementById('bgColor').value
+        };
+        // 使用 btoa 將數據封裝為 Base64 避免亂碼
+        const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+        const url = `${window.location.origin}${window.location.pathname}?data=${encodedData}&m=s`;
+        
+        navigator.clipboard.writeText(url).then(() => alert('分享連結已複製！這次參數已加密，確保文字正確顯示。'));
     },
 
     calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
