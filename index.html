@@ -3,31 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - iPhone 終極修正版</title>
+    <title>地鐵 3D - 終極修復分享版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, sans-serif; }
-        .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
+        .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; -webkit-perspective: 1000px; }
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; cursor: pointer; }
-        video#v { width: 100%; height: 100%; object-fit: cover; }
+        video#v { width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         
-        /* 改用 canvas 直接投影 */
+        /* 確保 Canvas 在 iPhone 上穩定顯示 */
         #offscreen { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
-            transform-origin: 0 0; z-index: 5; pointer-events: none;
+            transform-origin: 0 0; z-index: 10; pointer-events: none;
             clip-path: inset(0 0 0 100%);
-            will-change: transform;
             -webkit-transform-style: preserve-3d;
+            transform-style: preserve-3d;
             backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
         }
         
         #kuo-logo { 
             position: absolute; bottom: 30px; right: 30px; width: 120px; z-index: 99; 
             opacity: 0; transition: opacity 0.8s; pointer-events: none;
         }
+        
         .ui-bar { 
             background: rgba(15, 15, 15, 0.96); padding: 18px; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid #333; 
-            transition: transform 0.4s; padding-bottom: calc(var(--safe-bottom) + 10px);
+            transition: transform 0.4s ease; padding-bottom: calc(var(--safe-bottom) + 10px);
             position: absolute; bottom: 0; width: 100%; z-index: 100; box-sizing: border-box; backdrop-filter: blur(15px);
         }
         .ui-hide { transform: translateY(100%); visibility: hidden; }
@@ -55,7 +57,7 @@
             <input type="text" id="userInput" placeholder="輸入內容..." value="新年快樂" oninput="App.render()">
         </div>
         <div class="btn-row">
-            <button class="share-btn" onclick="App.copyLink()">複製 iPhone 穩定分享連結</button>
+            <button class="share-btn" onclick="App.copyLink()">複製分享連結</button>
         </div>
     </div>
 </div>
@@ -73,29 +75,39 @@ const App = {
         this.ctx = this.cvs.getContext('2d');
         this.ui = document.getElementById('ui');
 
-        const params = new URLSearchParams(window.location.search);
-        if(params.has('t')) {
-            document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
-            document.getElementById('textColor').value = '#' + (params.get('tc') || 'ffffff');
-            document.getElementById('bgColor').value = '#' + (params.get('bc') || '000000');
-        }
+        this.loadParams();
         
-        if(params.get('m') === 's') {
-            this.isReadonly = true;
-            if(this.ui) this.ui.remove();
-        }
-
-        this.v.onloadedmetadata = () => this.update();
-        window.onresize = () => this.update();
+        window.onresize = () => this.updateLayout();
+        this.v.onloadedmetadata = () => this.updateLayout();
         
+        // iPhone 必須觸發播放
         this.v.play().catch(() => {
-            document.addEventListener('touchstart', () => this.v.play(), {once: true});
+            document.addEventListener('touchstart', () => {
+                this.v.play();
+                this.loadParams(); // 點擊時再次確認文字載入
+            }, {once: true});
         });
 
         this.render();
         this.animate();
-        // 強制 iPhone 渲染
-        setTimeout(() => this.update(), 500);
+        
+        // 多重刷新機制
+        setTimeout(() => this.updateLayout(), 300);
+        setTimeout(() => this.updateLayout(), 1000);
+    },
+
+    loadParams: function() {
+        const params = new URLSearchParams(window.location.search);
+        if(params.has('t')) {
+            document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
+            if(params.has('tc')) document.getElementById('textColor').value = '#' + params.get('tc');
+            if(params.has('bc')) document.getElementById('bgColor').value = '#' + params.get('bc');
+            this.render();
+        }
+        if(params.get('m') === 's') {
+            this.isReadonly = true;
+            if(this.ui) this.ui.style.display = 'none';
+        }
     },
 
     render: function() {
@@ -106,7 +118,6 @@ const App = {
         this.ctx.clearRect(0,0,1800,800);
         this.ctx.save();
         
-        // 智慧分行邏輯
         let weight = 0; for(let i=0;i<txt.length;i++) weight += txt.charCodeAt(i)>255?1:0.5;
         let lines = (weight <= 6) ? [txt] : [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))];
 
@@ -130,7 +141,7 @@ const App = {
         this.ctx.restore();
     },
 
-    update: function() {
+    updateLayout: function() {
         const vw = this.v.videoWidth || 1920, vh = this.v.videoHeight || 1080;
         const r = document.getElementById('stage').getBoundingClientRect();
         const vr = vw/vh, sr = r.width/r.height;
@@ -140,12 +151,12 @@ const App = {
         
         const p = this.pts.map(pt => ({ x: pt.x*vw*s + ox, y: pt.y*vh*s + oy }));
         const m = this.calc(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        this.cvs.style.transform = `matrix3d(${m.join(',')}) translateZ(0)`; // iPhone 強制 GPU 開啟
+        this.cvs.style.transform = `matrix3d(${m.join(',')})`;
     },
 
     animate: function() {
         const t = this.v.currentTime;
-        this.cvs.style.display = (t >= this.timing.hide) ? 'none' : 'block';
+        this.cvs.style.opacity = (t >= this.timing.hide) ? '0' : '1';
         this.logo.style.opacity = (t >= this.timing.logo && t < 5.8) ? '1' : '0';
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
         this.cvs.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
@@ -153,16 +164,17 @@ const App = {
     },
 
     handleScreenClick: function() {
-        if(this.isReadonly) { this.v.currentTime = 0; this.v.play(); }
-        else { this.ui.classList.toggle('ui-hide'); setTimeout(() => this.update(), 450); }
+        if(this.isReadonly) { this.v.currentTime = 0; this.v.play(); this.loadParams(); }
+        else { this.ui.classList.toggle('ui-hide'); setTimeout(() => this.updateLayout(), 450); }
     },
 
     copyLink: function() {
         const t = encodeURIComponent(document.getElementById('userInput').value);
         const tc = document.getElementById('textColor').value.replace('#','');
         const bc = document.getElementById('bgColor').value.replace('#','');
+        // 回到您最熟悉的格式：文字 + 設定
         const url = `${window.location.origin}${window.location.pathname}?t=${t}&tc=${tc}&bc=${bc}&m=s`;
-        navigator.clipboard.writeText(url).then(() => alert('iPhone 連結已複製！請貼給朋友觀看。'));
+        navigator.clipboard.writeText(url).then(() => alert('連結已複製！內含文字與顏色設定。'));
     },
 
     calc: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
