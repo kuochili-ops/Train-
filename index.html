@@ -3,37 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地鐵 3D - 穩定分享版</title>
+    <title>地鐵 3D - iPhone 終極修正版</title>
     <style>
         :root { --safe-bottom: env(safe-area-inset-bottom); }
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, sans-serif; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         .viewport { position: relative; flex: 1; background: #000; overflow: hidden; cursor: pointer; }
         video#v { width: 100%; height: 100%; object-fit: cover; }
-        #canvas-image { 
+        
+        /* 改用 canvas 直接投影 */
+        #offscreen { 
             position: absolute; top: 0; left: 0; width: 1800px; height: 800px; 
-            transform-origin: 0 0; z-index: 2; pointer-events: none;
+            transform-origin: 0 0; z-index: 5; pointer-events: none;
             clip-path: inset(0 0 0 100%);
-            will-change: transform, clip-path;
+            will-change: transform;
+            -webkit-transform-style: preserve-3d;
+            backface-visibility: hidden;
         }
+        
         #kuo-logo { 
             position: absolute; bottom: 30px; right: 30px; width: 120px; z-index: 99; 
-            opacity: 0; transition: opacity 1s ease-in-out; pointer-events: none;
+            opacity: 0; transition: opacity 0.8s; pointer-events: none;
         }
         .ui-bar { 
-            background: rgba(17, 17, 17, 0.95); padding: 15px; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid #333; 
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            padding-bottom: calc(var(--safe-bottom) + 10px);
-            position: absolute; bottom: 0; width: 100%; z-index: 100; box-sizing: border-box; backdrop-filter: blur(10px);
+            background: rgba(15, 15, 15, 0.96); padding: 18px; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid #333; 
+            transition: transform 0.4s; padding-bottom: calc(var(--safe-bottom) + 10px);
+            position: absolute; bottom: 0; width: 100%; z-index: 100; box-sizing: border-box; backdrop-filter: blur(15px);
         }
-        .ui-hide { transform: translateY(100%); visibility: hidden; pointer-events: none; }
-        .row { display: flex; gap: 10px; align-items: center; color: white; font-size: 14px; }
+        .ui-hide { transform: translateY(100%); visibility: hidden; }
+        .row { display: flex; gap: 12px; align-items: center; color: white; font-size: 14px; }
         input[type="text"] { flex: 1; background: #222; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
         input[type="color"] { width: 44px; height: 44px; border: none; background: none; cursor: pointer; }
-        .btn-row { display: flex; gap: 8px; }
-        button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-row { display: flex; gap: 10px; }
+        button { flex: 1; padding: 16px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 15px; }
         .share-btn { background: #34c759; color: white; }
-        .hide-btn { background: #fff; color: black; }
     </style>
 </head>
 <body>
@@ -41,49 +44,40 @@
 <div class="app-container">
     <div class="viewport" id="stage" onclick="App.handleScreenClick()">
         <video id="v" src="Train.mov" loop muted playsinline crossorigin="anonymous"></video>
-        <img id="canvas-image">
+        <canvas id="offscreen" width="1800" height="800"></canvas>
         <img id="kuo-logo" src="IMG_6604.png">
     </div>
     
     <div class="ui-bar" id="ui">
         <div class="row">
-            字：<input type="color" id="textColor" value="#ffffff" oninput="App.renderText()">
-            底：<input type="color" id="bgColor" value="#000000" oninput="App.renderText()">
-            <input type="text" id="userInput" placeholder="輸入文字..." value="新年快樂" oninput="App.renderText()">
+            字：<input type="color" id="textColor" value="#ffffff" oninput="App.render()">
+            底：<input type="color" id="bgColor" value="#000000" oninput="App.render()">
+            <input type="text" id="userInput" placeholder="輸入內容..." value="新年快樂" oninput="App.render()">
         </div>
         <div class="btn-row">
-            <button class="share-btn" onclick="App.copyShareLink()">複製分享連結</button>
-            <button class="hide-btn" onclick="App.toggleUI(true)">預覽展示</button>
+            <button class="share-btn" onclick="App.copyLink()">複製 iPhone 穩定分享連結</button>
         </div>
     </div>
 </div>
 
-<canvas id="offscreen" style="display:none;"></canvas>
-
 <script>
 const App = {
     pts: [{x: 0.08, y: 0.35}, {x: 0.94, y: 0.22}, {x: 0.94, y: 0.78}, {x: 0.08, y: 0.58}],
-    timing: { start: 2.55, end: 3.83, logoStart: 3.8, hide: 5.35 },
+    timing: { start: 2.55, end: 3.83, logo: 3.8, hide: 5.35 },
     isReadonly: false,
 
     init: function() {
         this.v = document.getElementById('v');
-        this.img = document.getElementById('canvas-image');
         this.cvs = document.getElementById('offscreen');
         this.logo = document.getElementById('kuo-logo');
         this.ctx = this.cvs.getContext('2d');
         this.ui = document.getElementById('ui');
 
         const params = new URLSearchParams(window.location.search);
-        
-        // 使用 Base64 解碼文字參數
-        if(params.has('data')) {
-            try {
-                const decodedData = JSON.parse(atob(params.get('data')));
-                document.getElementById('userInput').value = decodedData.t;
-                document.getElementById('textColor').value = decodedData.tc;
-                document.getElementById('bgColor').value = decodedData.bc;
-            } catch(e) { console.log("Data decode failed"); }
+        if(params.has('t')) {
+            document.getElementById('userInput').value = decodeURIComponent(params.get('t'));
+            document.getElementById('textColor').value = '#' + (params.get('tc') || 'ffffff');
+            document.getElementById('bgColor').value = '#' + (params.get('bc') || '000000');
         }
         
         if(params.get('m') === 's') {
@@ -91,104 +85,87 @@ const App = {
             if(this.ui) this.ui.remove();
         }
 
-        window.addEventListener('resize', () => this.updateWarp());
-        this.v.onloadedmetadata = () => this.updateWarp();
+        this.v.onloadedmetadata = () => this.update();
+        window.onresize = () => this.update();
         
-        this.renderText();
-        this.v.play();
+        this.v.play().catch(() => {
+            document.addEventListener('touchstart', () => this.v.play(), {once: true});
+        });
+
+        this.render();
         this.animate();
+        // 強制 iPhone 渲染
+        setTimeout(() => this.update(), 500);
+    },
+
+    render: function() {
+        const txt = document.getElementById('userInput').value || "";
+        const tc = document.getElementById('textColor').value;
+        const bc = document.getElementById('bgColor').value;
         
-        // 重要：確保文字渲染與座標校準執行兩次以防加載延遲
-        setTimeout(() => { this.renderText(); this.updateWarp(); }, 100);
-        setTimeout(() => { this.renderText(); this.updateWarp(); }, 600);
-    },
-
-    getStringWeight: function(str) {
-        let weight = 0;
-        for (let i = 0; i < str.length; i++) {
-            weight += str.charCodeAt(i) > 255 ? 1 : 0.5;
-        }
-        return weight;
-    },
-
-    renderText: function() {
-        this.cvs.width = 1800; this.cvs.height = 800;
-        const rawTxt = document.getElementById('userInput').value || "HAPPY NEW YEAR";
-        const bgColor = document.getElementById('bgColor').value;
-        const textColor = document.getElementById('textColor').value;
-        this.ctx.clearRect(0, 0, 1800, 800);
+        this.ctx.clearRect(0,0,1800,800);
         this.ctx.save();
         
-        const totalWeight = this.getStringWeight(rawTxt);
-        let lines = [];
-        if (totalWeight <= 6) {
-            lines = [rawTxt];
-        } else {
-            let currentWeight = 0, splitIndex = 0;
-            for (let i = 0; i < rawTxt.length; i++) {
-                currentWeight += rawTxt.charCodeAt(i) > 255 ? 1 : 0.5;
-                if (currentWeight >= totalWeight / 2) { splitIndex = i + 1; break; }
-            }
-            lines = [rawTxt.substring(0, splitIndex).trim(), rawTxt.substring(splitIndex).trim()];
-        }
+        // 智慧分行邏輯
+        let weight = 0; for(let i=0;i<txt.length;i++) weight += txt.charCodeAt(i)>255?1:0.5;
+        let lines = (weight <= 6) ? [txt] : [txt.substring(0, Math.ceil(txt.length/2)), txt.substring(Math.ceil(txt.length/2))];
 
-        this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle'; this.ctx.fillStyle = textColor;
-        if (bgColor !== "#000000") {
-            this.ctx.save(); this.ctx.fillStyle = bgColor + "E6";
-            let maxW = 0; this.ctx.font = lines.length === 1 ? '900 350px sans-serif' : '900 240px sans-serif';
+        this.ctx.translate(1750, 400); this.ctx.textAlign = 'right'; this.ctx.textBaseline = 'middle';
+        
+        if (bc !== "#000000") {
+            this.ctx.fillStyle = bc + "E6";
+            let maxW = 0; this.ctx.font = lines.length===1 ? '900 350px sans-serif' : '900 240px sans-serif';
             lines.forEach(l => { let w = this.ctx.measureText(l).width * 0.85; if(w > maxW) maxW = w; });
-            this.ctx.roundRect(-maxW - 50, lines.length === 1 ? -250 : -350, maxW + 100, lines.length === 1 ? 500 : 700, 40);
-            this.ctx.fill(); this.ctx.restore();
+            this.ctx.beginPath();
+            this.ctx.roundRect(-maxW - 50, lines.length===1 ? -250 : -350, maxW + 100, lines.length===1 ? 500 : 700, 40);
+            this.ctx.fill();
         }
+        
+        this.ctx.fillStyle = tc;
         if (lines.length === 1) { 
             this.ctx.scale(0.85, 2.0); this.ctx.font = '900 350px sans-serif'; this.ctx.fillText(lines[0], 0, 0); 
         } else { 
             this.ctx.scale(0.85, 1.3); this.ctx.font = '900 240px sans-serif'; this.ctx.fillText(lines[0], 0, -120); this.ctx.fillText(lines[1], 0, 120); 
         }
         this.ctx.restore();
-        this.img.src = this.cvs.toDataURL();
     },
 
-    updateWarp: function() {
+    update: function() {
         const vw = this.v.videoWidth || 1920, vh = this.v.videoHeight || 1080;
-        const rect = document.getElementById('stage').getBoundingClientRect();
-        const vRatio = vw / vh, sRatio = rect.width / rect.height;
-        let scale, ox = 0, oy = 0;
-        if (sRatio > vRatio) { scale = rect.width / vw; oy = (rect.height - vh * scale) / 2; }
-        else { scale = rect.height / vh; ox = (rect.width - vw * scale) / 2; }
-        const p = this.pts.map(pt => ({ x: pt.x * vw * scale + ox, y: pt.y * vh * scale + oy }));
-        const m = this.calcMatrix(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        this.img.style.transform = `matrix3d(${m.join(',')})`;
-    },
-
-    handleScreenClick: function() {
-        if(this.isReadonly) { this.v.currentTime = 0; this.v.play(); }
-        else { if(this.ui) { this.ui.classList.toggle('ui-hide'); setTimeout(() => this.updateWarp(), 450); } }
+        const r = document.getElementById('stage').getBoundingClientRect();
+        const vr = vw/vh, sr = r.width/r.height;
+        let s, ox=0, oy=0;
+        if(sr > vr) { s = r.width/vw; oy = (r.height - vh*s)/2; }
+        else { s = r.height/vh; ox = (r.width - vw*s)/2; }
+        
+        const p = this.pts.map(pt => ({ x: pt.x*vw*s + ox, y: pt.y*vh*s + oy }));
+        const m = this.calc(0,0, 1800,0, 1800,800, 0,800, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        this.cvs.style.transform = `matrix3d(${m.join(',')}) translateZ(0)`; // iPhone 強制 GPU 開啟
     },
 
     animate: function() {
         const t = this.v.currentTime;
-        this.img.style.display = (t >= this.timing.hide) ? 'none' : 'block';
-        this.logo.style.opacity = (t >= this.timing.logoStart && t < 5.8) ? '1' : '0';
+        this.cvs.style.display = (t >= this.timing.hide) ? 'none' : 'block';
+        this.logo.style.opacity = (t >= this.timing.logo && t < 5.8) ? '1' : '0';
         const prog = Math.max(0, Math.min(1, (t - this.timing.start) / (this.timing.end - this.timing.start)));
-        this.img.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
+        this.cvs.style.clipPath = (t < this.timing.start || t >= this.timing.hide) ? 'inset(0 0 0 100%)' : `inset(0 0 0 ${100 - prog*100}%)`;
         requestAnimationFrame(() => this.animate());
     },
 
-    copyShareLink: function() {
-        const data = {
-            t: document.getElementById('userInput').value,
-            tc: document.getElementById('textColor').value,
-            bc: document.getElementById('bgColor').value
-        };
-        // 使用 btoa 將數據封裝為 Base64 避免亂碼
-        const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
-        const url = `${window.location.origin}${window.location.pathname}?data=${encodedData}&m=s`;
-        
-        navigator.clipboard.writeText(url).then(() => alert('分享連結已複製！這次參數已加密，確保文字正確顯示。'));
+    handleScreenClick: function() {
+        if(this.isReadonly) { this.v.currentTime = 0; this.v.play(); }
+        else { this.ui.classList.toggle('ui-hide'); setTimeout(() => this.update(), 450); }
     },
 
-    calcMatrix: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
+    copyLink: function() {
+        const t = encodeURIComponent(document.getElementById('userInput').value);
+        const tc = document.getElementById('textColor').value.replace('#','');
+        const bc = document.getElementById('bgColor').value.replace('#','');
+        const url = `${window.location.origin}${window.location.pathname}?t=${t}&tc=${tc}&bc=${bc}&m=s`;
+        navigator.clipboard.writeText(url).then(() => alert('iPhone 連結已複製！請貼給朋友觀看。'));
+    },
+
+    calc: function(x1,y1,x2,y2,x3,y3,x4,y4,px1,py1,px2,py2,px3,py3,px4,py4) {
         const a = [[x1,y1,1,0,0,0,-px1*x1,-px1*y1],[0,0,0,x1,y1,1,-py1*x1,-py1*y1],[x2,y2,1,0,0,0,-px2*x2,-px2*y2],[0,0,0,x2,y2,1,-py2*x2,-py2*y2],[x3,y3,1,0,0,0,-px3*x3,-px3*y3],[0,0,0,x3,y3,1,-py3*x3,-py3*y3],[x4,y4,1,0,0,0,-px4*x4,-px4*y4],[0,0,0,x4,y4,1,-py4*x4,-py4*y4]];
         const b = [px1,py1,px2,py2,px3,py3,px4,py4];
         for(let i=0;i<8;i++){
